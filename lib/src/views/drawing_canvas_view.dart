@@ -11,6 +11,10 @@ class DrawingCanvasView extends StatefulWidget {
 
 class _DrawingCanvasViewState extends State<DrawingCanvasView> {
   late final CanvasController _controller;
+  final TransformationController _transformationController = TransformationController();
+  final GlobalKey _canvasKey = GlobalKey(); 
+  
+  int _pointerCount = 0;
 
   @override
   void initState() {
@@ -21,28 +25,99 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
   @override
   void dispose() {
     _controller.dispose();
+    _transformationController.dispose();
     super.dispose();
+  }
+
+  Offset _getAbsoluteCanvasOffset(Offset globalPosition) {
+    final RenderBox? renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return globalPosition;
+    return renderBox.globalToLocal(globalPosition);
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
         return Listener(
-          onPointerDown: _controller.handlePointerDown,
-          onPointerMove: _controller.handlePointerMove,
-          onPointerUp: _controller.handlePointerUp,
-          child: RepaintBoundary(
-            child: CustomPaint(
-              painter: StrokePainter(
-                history: _controller.history,
-                currentStroke: _controller.currentStroke,
-              ),
-              child: Container(
-                color: Colors.transparent,
-                width: double.infinity,
-                height: double.infinity,
+          onPointerDown: (event) {
+            setState(() => _pointerCount++);
+            if (_pointerCount == 1) {
+              final canvasOffset = _getAbsoluteCanvasOffset(event.position);
+              _controller.handlePointerDown(
+                event, 
+                canvasOffset,
+                _transformationController.value,
+              );
+            }
+          },
+          onPointerMove: (event) {
+            if (_pointerCount == 1) {
+              final canvasOffset = _getAbsoluteCanvasOffset(event.position);
+              _controller.handlePointerMove(
+                event, 
+                canvasOffset,
+                _transformationController.value,
+              );
+            }
+          },
+          onPointerUp: (event) {
+            setState(() => _pointerCount = (_pointerCount - 1).clamp(0, 10));
+            if (_pointerCount == 0) {
+              _controller.handlePointerUp(event);
+            }
+          },
+          onPointerCancel: (event) {
+            setState(() => _pointerCount = 0);
+            _controller.handlePointerUp(event);
+          },
+          child: Container(
+            color: const Color(0xFFEAEAEA), 
+            width: double.infinity,
+            height: double.infinity,
+            child: Center(
+              child: InteractiveViewer(
+                transformationController: _transformationController,
+                minScale: 0.5,
+                maxScale: 4.0,
+                panEnabled: _pointerCount >= 2,
+                scaleEnabled: _pointerCount >= 2,
+                boundaryMargin: const EdgeInsets.all(500),
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0), 
+                  child: Center(
+                    child: Container(
+                      key: _canvasKey, 
+                      width: screenSize.width * 0.95, 
+                      height: screenSize.height * 0.90,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          )
+                        ],
+                      ),
+                      child: ClipRect(
+                        child: RepaintBoundary(
+                          child: CustomPaint(
+                            painter: StrokePainter(
+                              history: _controller.history,
+                              currentStroke: _controller.currentStroke,
+                            ),
+                            child: const SizedBox.expand(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

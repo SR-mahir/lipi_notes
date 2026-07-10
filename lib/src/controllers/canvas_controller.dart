@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import '../models/stroke_model.dart';
 
 class CanvasController extends ChangeNotifier {
-  // Application State
   final List<DrawingStroke> _history = [];
   List<StrokePoint> _currentPoints = [];
 
-  // Getters for the View layer
   List<DrawingStroke> get history => _history;
   
   DrawingStroke? get currentStroke => _currentPoints.isNotEmpty
@@ -17,30 +15,33 @@ class CanvasController extends ChangeNotifier {
         )
       : null;
 
-  // Controller Handlers
-  void handlePointerDown(PointerDownEvent event) {
+  void handlePointerDown(PointerEvent event, Offset canvasOffset, Matrix4 transformMatrix) {
+    double absolutePressure = event.pressure > 0 ? event.pressure : 1.0;
+
     _currentPoints = [
       StrokePoint(
-        point: event.localPosition,
-        pressure: event.pressure,
+        point: canvasOffset,
+        pressure: absolutePressure,
         timestamp: DateTime.now(),
       )
     ];
     notifyListeners();
   }
 
-  void handlePointerMove(PointerMoveEvent event) {
+  void handlePointerMove(PointerEvent event, Offset canvasOffset, Matrix4 transformMatrix) {
+    double absolutePressure = event.pressure > 0 ? event.pressure : 1.0;
+
     _currentPoints.add(
       StrokePoint(
-        point: event.localPosition,
-        pressure: event.pressure,
+        point: canvasOffset,
+        pressure: absolutePressure,
         timestamp: DateTime.now(),
       ),
     );
     notifyListeners();
   }
 
-  void handlePointerUp(PointerUpEvent event) {
+  void handlePointerUp(PointerEvent event) {
     if (_currentPoints.isNotEmpty) {
       _history.add(
         DrawingStroke(

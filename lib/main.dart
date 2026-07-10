@@ -18,7 +18,6 @@ class LipinotesApp extends StatelessWidget {
         colorSchemeSeed: Colors.green,
       ),
       home: const Scaffold(
-        backgroundColor: Color(0xFFF6F6F6),
         body: SafeArea(
           child: DrawingCanvasView(),
         ),
