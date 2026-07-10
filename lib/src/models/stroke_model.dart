@@ -1,4 +1,5 @@
 import 'dart:ui';
+enum CanvasTool { pen, eraser }
 
 class StrokePoint {
   final Offset point;

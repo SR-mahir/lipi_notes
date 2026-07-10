@@ -18,25 +18,42 @@ class DBHelper {
       path,
       version: 1,
       onCreate: (db, version) async {
-        // Create Notebooks Directory Table
+        // Create the strokes database table to save ink configurations
         await db.execute('''
-          CREATE TABLE notebooks (
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            created_at TEXT NOT NULL
-          )
-        ''');
-
-        // Create Canvas Pages Order Table
-        await db.execute('''
-          CREATE TABLE pages (
-            id TEXT PRIMARY KEY,
-            notebook_id TEXT NOT NULL,
-            page_index INTEGER NOT NULL,
-            FOREIGN KEY (notebook_id) REFERENCES notebooks (id) ON DELETE CASCADE
+          CREATE TABLE strokes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            path_string TEXT NOT NULL,
+            color INTEGER NOT NULL,
+            stroke_width REAL NOT NULL
           )
         ''');
       },
     );
+  }
+
+  // --- SAVE OPERATION ---
+  static Future<int> insertStroke(String pathString, int colorValue, double width) async {
+    final db = await database;
+    return await db.insert(
+      'strokes',
+      {
+        'path_string': pathString,
+        'color': colorValue,
+        'stroke_width': width,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  // --- LOAD OPERATION ---
+  static Future<List<Map<String, dynamic>>> getSavedStrokes() async {
+    final db = await database;
+    return await db.query('strokes', orderBy: 'id ASC');
+  }
+
+  // --- WIPE OPERATION ---
+  static Future<void> clearAllStrokes() async {
+    final db = await database;
+    await db.delete('strokes');
   }
 }
