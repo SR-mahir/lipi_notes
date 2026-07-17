@@ -51,6 +51,16 @@ class DBHelper {
     return await db.query('strokes', orderBy: 'id ASC');
   }
 
+  // --- DELETE OPERATION ---
+  static Future<int> deleteStroke(int id) async {
+    final db = await database;
+    return await db.delete(
+      'strokes',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   // --- WIPE OPERATION ---
   static Future<void> clearAllStrokes() async {
     final db = await database;

@@ -56,6 +56,8 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                     canvasOffset,
                     _transformationController.value,
                   );
+                } else if (_pointerCount >= 2) {
+                  _controller.finalizeCurrentStroke();
                 }
               },
               onPointerMove: (event) {
@@ -85,8 +87,8 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                 child: Center(
                   child: InteractiveViewer(
                     transformationController: _transformationController,
-                    minScale: 0.5,
-                    maxScale: 4.0,
+                    minScale: 0.1,
+                    maxScale: 10.0,
                     panEnabled: _pointerCount >= 2,
                     scaleEnabled: _pointerCount >= 2,
                     boundaryMargin: const EdgeInsets.all(500),
@@ -102,7 +104,7 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                             borderRadius: BorderRadius.circular(4),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
+                                color: Colors.black.withValues(alpha: 0.1),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
                               )
@@ -116,6 +118,8 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                                   currentStroke: _controller.currentStroke,
                                 ),
                                 child: const SizedBox.expand(),
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -124,8 +128,6 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                 ),
               ),
             ),
-          ),
-        ),
             
             // Layer 2: Floating Tool Selection Controls Dock Matrix
             Positioned(
@@ -140,7 +142,7 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.15),
+                        color: Colors.black.withValues(alpha: 0.15),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       )
