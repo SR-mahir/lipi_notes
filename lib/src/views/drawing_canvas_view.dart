@@ -116,6 +116,8 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                                 painter: StrokePainter(
                                   history: _controller.history,
                                   currentStroke: _controller.currentStroke,
+                                  lassoPath: _controller.lassoPath,
+                                  selectionBounds: _controller.selectionBounds,
                                 ),
                                 child: const SizedBox.expand(),
                               ),
@@ -134,45 +136,127 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
               top: 20,
               left: 0,
               right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.15),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      )
-                    ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        )
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit),
+                          color: _controller.activeTool == CanvasTool.pen ? Colors.green : Colors.grey,
+                          onPressed: () => _controller.setTool(CanvasTool.pen),
+                          tooltip: "Pen Tool",
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.cleaning_services_rounded),
+                          color: _controller.activeTool == CanvasTool.objectEraser ? Colors.green : Colors.grey,
+                          onPressed: () => _controller.setTool(CanvasTool.objectEraser),
+                          tooltip: "Object Eraser",
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.auto_fix_normal),
+                          color: _controller.activeTool == CanvasTool.segmentEraser ? Colors.green : Colors.grey,
+                          onPressed: () => _controller.setTool(CanvasTool.segmentEraser),
+                          tooltip: "Segment Eraser",
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.gesture),
+                          color: _controller.activeTool == CanvasTool.lasso ? Colors.green : Colors.grey,
+                          onPressed: () => _controller.setTool(CanvasTool.lasso),
+                          tooltip: "Lasso Selection",
+                        ),
+                        const SizedBox(width: 12),
+                        Container(width: 1, height: 24, color: Colors.grey.shade300),
+                        const SizedBox(width: 12),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          color: Colors.redAccent,
+                          onPressed: () => _controller.clearCanvas(),
+                          tooltip: "Clear Canvas",
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        color: _controller.activeTool == CanvasTool.pen ? Colors.green : Colors.grey,
-                        onPressed: () => _controller.setTool(CanvasTool.pen),
+                  if (_controller.activeTool == CanvasTool.pen) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.95),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          )
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        icon: const Icon(Icons.cleaning_services_rounded),
-                        color: _controller.activeTool == CanvasTool.eraser ? Colors.green : Colors.grey,
-                        onPressed: () => _controller.setTool(CanvasTool.eraser),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextButton(
+                            onPressed: () => _controller.setPenType(PenType.fountain),
+                            child: Text(
+                              "Fountain",
+                              style: TextStyle(
+                                color: _controller.activePenType == PenType.fountain ? Colors.green : Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _controller.setPenType(PenType.ballpoint),
+                            child: Text(
+                              "Ballpoint",
+                              style: TextStyle(
+                                color: _controller.activePenType == PenType.ballpoint ? Colors.green : Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _controller.setPenType(PenType.highlighter),
+                            child: Text(
+                              "Highlighter",
+                              style: TextStyle(
+                                color: _controller.activePenType == PenType.highlighter ? Colors.green : Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _controller.setPenType(PenType.brush),
+                            child: Text(
+                              "Brush",
+                              style: TextStyle(
+                                color: _controller.activePenType == PenType.brush ? Colors.green : Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Container(width: 1, height: 24, color: Colors.grey.shade300),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        color: Colors.redAccent,
-                        onPressed: () => _controller.clearCanvas(),
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  ]
+                ],
               ),
             ),
           ],

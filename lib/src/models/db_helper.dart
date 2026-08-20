@@ -16,7 +16,7 @@ class DBHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         // Create the strokes database table to save ink configurations
         await db.execute('''
@@ -24,15 +24,21 @@ class DBHelper {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             path_string TEXT NOT NULL,
             color INTEGER NOT NULL,
-            stroke_width REAL NOT NULL
+            stroke_width REAL NOT NULL,
+            pen_type TEXT NOT NULL DEFAULT 'fountain'
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute("ALTER TABLE strokes ADD COLUMN pen_type TEXT NOT NULL DEFAULT 'fountain'");
+        }
       },
     );
   }
 
   // --- SAVE OPERATION ---
-  static Future<int> insertStroke(String pathString, int colorValue, double width) async {
+  static Future<int> insertStroke(String pathString, int colorValue, double width, String penType) async {
     final db = await database;
     return await db.insert(
       'strokes',
@@ -40,6 +46,7 @@ class DBHelper {
         'path_string': pathString,
         'color': colorValue,
         'stroke_width': width,
+        'pen_type': penType,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );

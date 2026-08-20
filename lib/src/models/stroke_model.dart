@@ -1,5 +1,6 @@
 import 'dart:ui';
-enum CanvasTool { pen, eraser }
+enum CanvasTool { pen, objectEraser, segmentEraser, lasso }
+enum PenType { fountain, ballpoint, highlighter, brush }
 
 class StrokePoint {
   final Offset point;
@@ -18,6 +19,7 @@ class DrawingStroke {
   final List<StrokePoint> points;
   final Color color;
   final double strokeWidth;
+  final PenType penType;
   late final Rect boundingBox;
 
   DrawingStroke({
@@ -25,6 +27,7 @@ class DrawingStroke {
     required this.points,
     required this.color,
     required this.strokeWidth,
+    this.penType = PenType.fountain,
   }) {
     if (points.isEmpty) {
       boundingBox = Rect.zero;
