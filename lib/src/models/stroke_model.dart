@@ -1,6 +1,7 @@
 import 'dart:ui';
 enum CanvasTool { pen, objectEraser, segmentEraser, lasso }
 enum PenType { fountain, ballpoint, highlighter, brush }
+enum CanvasTemplate { blank, ruled, grid, dotted }
 
 class StrokePoint {
   final Offset point;

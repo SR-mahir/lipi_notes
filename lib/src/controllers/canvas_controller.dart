@@ -10,6 +10,7 @@ class CanvasController extends ChangeNotifier {
   List<StrokePoint> _currentPoints = [];
   CanvasTool _activeTool = CanvasTool.pen;
   PenType _activePenType = PenType.fountain;
+  CanvasTemplate _activeTemplate = CanvasTemplate.blank;
 
   // Lasso and selection properties
   final List<Offset> _lassoPath = [];
@@ -26,6 +27,7 @@ class CanvasController extends ChangeNotifier {
   List<DrawingStroke> get history => _history;
   CanvasTool get activeTool => _activeTool;
   PenType get activePenType => _activePenType;
+  CanvasTemplate get activeTemplate => _activeTemplate;
   List<Offset> get lassoPath => _lassoPath;
   List<DrawingStroke> get selectedStrokes => _selectedStrokes;
   Rect? get selectionBounds => _selectionBounds;
@@ -67,6 +69,11 @@ class CanvasController extends ChangeNotifier {
   void setPenType(PenType type) {
     finalizeCurrentStroke();
     _activePenType = type;
+    notifyListeners();
+  }
+
+  void setTemplate(CanvasTemplate template) {
+    _activeTemplate = template;
     notifyListeners();
   }
 

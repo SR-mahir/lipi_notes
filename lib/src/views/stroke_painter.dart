@@ -6,16 +6,20 @@ class StrokePainter extends CustomPainter {
   final DrawingStroke? currentStroke;
   final List<Offset> lassoPath;
   final Rect? selectionBounds;
+  final CanvasTemplate activeTemplate;
 
   StrokePainter({
     required this.history,
     this.currentStroke,
     this.lassoPath = const [],
     this.selectionBounds,
+    this.activeTemplate = CanvasTemplate.blank,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
+    _drawBackgroundTemplate(canvas, size);
+
     // Pass 1: Draw Highlighter strokes underneath other inks
     for (var stroke in history) {
       if (stroke.penType == PenType.highlighter) {
@@ -176,6 +180,45 @@ class StrokePainter extends CustomPainter {
       return baseWidth * (0.3 + 1.2 * p.pressure);
     } else {
       return baseWidth * (0.5 + 0.8 * p.pressure);
+    }
+  }
+
+  void _drawBackgroundTemplate(Canvas canvas, Size size) {
+    if (activeTemplate == CanvasTemplate.blank) return;
+
+    final gridPaint = Paint()
+      ..color = Colors.blue.withOpacity(0.08)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    if (activeTemplate == CanvasTemplate.ruled) {
+      const double lineSpacing = 28.0;
+      for (double y = lineSpacing; y < size.height; y += lineSpacing) {
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+      }
+      final marginPaint = Paint()
+        ..color = Colors.red.withOpacity(0.18)
+        ..strokeWidth = 1.5
+        ..style = PaintingStyle.stroke;
+      canvas.drawLine(const Offset(70, 0), Offset(70, size.height), marginPaint);
+    } else if (activeTemplate == CanvasTemplate.grid) {
+      const double gridSize = 24.0;
+      for (double y = gridSize; y < size.height; y += gridSize) {
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+      }
+      for (double x = gridSize; x < size.width; x += gridSize) {
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+      }
+    } else if (activeTemplate == CanvasTemplate.dotted) {
+      const double dotSpacing = 24.0;
+      final dotPaint = Paint()
+        ..color = Colors.blue.withOpacity(0.22)
+        ..style = PaintingStyle.fill;
+      for (double y = dotSpacing; y < size.height; y += dotSpacing) {
+        for (double x = dotSpacing; x < size.width; x += dotSpacing) {
+          canvas.drawCircle(Offset(x, y), 1.2, dotPaint);
+        }
+      }
     }
   }
 

@@ -6,14 +6,14 @@ This document provides a detailed evaluation of the current **Lipinotes** codeba
 
 ## 📊 Summary of Completion
 
-- **Overall Project Completion**: **~55%**
-- **Features Fully Implemented**: **11 / 20**
+- **Overall Project Completion**: **~60%**
+- **Features Fully Implemented**: **12 / 20**
 - **Features Partially Implemented**: **0 / 20**
-- **Features Not Started**: **9 / 20**
+- **Features Not Started**: **8 / 20**
 
 ### Module Completion Estimates
 * **Module 1: High-Performance Canvas Engine**: **100%** (Core drawing, pressure, velocity, Bezier smoothing, and multi-pen profiles are complete.)
-* **Module 2: Viewport Matrix Transformations & Tool Annotations**: **~80%** (Affine viewport zoom/pan, object-eraser, segment-eraser, lasso transformations, and shape snapping are complete. Typography layers are remaining.)
+* **Module 2: Viewport Matrix Transformations & Tool Annotations**: **100%** (Affine viewport zoom/pan, object-eraser, segment-eraser, lasso transformations, shape snapping, and grid paper templates are complete.)
 * **Module 3: Local File System & Relational Database**: **~40%** (SQLite configuration, base tables, and async serialization queue are complete. Notebook/folder models and navigation UI are remaining.)
 * **Module 4: Serialization, Importers, & PDF Compiler**: **~10%** (Point list serialization via isolate is complete. SVG path format, PDF import, and PDF export are remaining.)
 
@@ -48,13 +48,13 @@ This document provides a detailed evaluation of the current **Lipinotes** codeba
 | Feature | Status | Current Implementation Details | Gaps / Missing Items |
 | :--- | :--- | :--- | :--- |
 | **Affine Viewport Transformations** | ✅ **Done** | [drawing_canvas_view.dart](file:///Users/mahir/.gemini/antigravity/scratch/lipi_notes/lib/src/views/drawing_canvas_view.dart) implements matrix scaling and panning (10% to 1000%) with pointer count checks to prevent trailing line rendering during scale pinch gestures. | None. |
-| **Custom Canvas Grid Templates** | ❌ **Not Started** | None. The drawing canvas background is just a solid white container. | Ruled Lines, Engineering Square Grid, Dotted Matrix, and Isometric Grid background layers are not implemented. |
+| **Custom Canvas Grid Templates** | ✅ **Done** | [stroke_painter.dart](file:///Users/mahir/.gemini/antigravity/scratch/lipi_notes/lib/src/views/stroke_painter.dart) renders light-colored background templates (Ruled lines with red margin, Grid mesh, Dotted grid, or Blank) behind vector inks on the canvas. | None. |
 | **Hierarchical Local Notebook Manager** | ❌ **Not Started** | None. | There is no UI for folder structure, navigation, or grouping notebooks. The app directly launches into a single drawing canvas view. |
 | **Multi-Page Layout Organizer** | ❌ **Not Started** | None. | The app only supports a single canvas view. Pagination stack, reordering, duplicate/add/delete pages are not implemented. |
 
 ---
 
-### 4. Overlays, Assets, & Personalization
+## 4. Overlays, Assets, & Personalization
 
 | Feature | Status | Current Implementation Details | Gaps / Missing Items |
 | :--- | :--- | :--- | :--- |
@@ -65,7 +65,7 @@ This document provides a detailed evaluation of the current **Lipinotes** codeba
 
 ---
 
-### 5. System Optimization & Local File Actions
+## 5. System Optimization & Local File Actions
 
 | Feature | Status | Current Implementation Details | Gaps / Missing Items |
 | :--- | :--- | :--- | :--- |
@@ -100,13 +100,12 @@ To support the full application scope, the database needs tables for:
 
 ## 🚀 Recommended Next Milestones
 
-We should build directly on top of these 11 fully-implemented foundation features:
+We should build directly on top of these 12 fully-implemented foundation features:
 
 1. **Hierarchical Database Schema & Notebook Explorer (Module 3)**:
    * Build the `Folder`, `Notebook`, and `Page` tables.
    * Implement the Neo-Minimalist Dashboard view to navigate folders and open notebooks.
-2. **Background Paper Templates & Multipage Selector (Module 2)**:
-   * Build page background grids (Ruled, Dotted, Isometric).
-   * Implement multipage controls (add page, navigate pages).
+2. **Dynamic Inversion Dark Mode (Module 4)**:
+   * Implement background/ink inverting.
 3. **Typography Layers (Module 4)**:
    * Add text boxes and typing.

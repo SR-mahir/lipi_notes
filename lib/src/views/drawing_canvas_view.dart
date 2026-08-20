@@ -16,6 +16,7 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
   final GlobalKey _canvasKey = GlobalKey(); 
   
   int _pointerCount = 0;
+  bool _showTemplates = false;
 
   @override
   void initState() {
@@ -118,6 +119,7 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                                   currentStroke: _controller.currentStroke,
                                   lassoPath: _controller.lassoPath,
                                   selectionBounds: _controller.selectionBounds,
+                                  activeTemplate: _controller.activeTemplate,
                                 ),
                                 child: const SizedBox.expand(),
                               ),
@@ -181,6 +183,17 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                           color: _controller.activeTool == CanvasTool.lasso ? Colors.green : Colors.grey,
                           onPressed: () => _controller.setTool(CanvasTool.lasso),
                           tooltip: "Lasso Selection",
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.grid_on),
+                          color: _showTemplates ? Colors.green : Colors.grey,
+                          onPressed: () {
+                            setState(() {
+                              _showTemplates = !_showTemplates;
+                            });
+                          },
+                          tooltip: "Canvas Templates",
                         ),
                         const SizedBox(width: 12),
                         Container(width: 1, height: 24, color: Colors.grey.shade300),
@@ -248,6 +261,68 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                               "Brush",
                               style: TextStyle(
                                 color: _controller.activePenType == PenType.brush ? Colors.green : Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (_showTemplates) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.95),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          )
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextButton(
+                            onPressed: () => _controller.setTemplate(CanvasTemplate.blank),
+                            child: Text(
+                              "Blank",
+                              style: TextStyle(
+                                color: _controller.activeTemplate == CanvasTemplate.blank ? Colors.green : Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _controller.setTemplate(CanvasTemplate.ruled),
+                            child: Text(
+                              "Ruled",
+                              style: TextStyle(
+                                color: _controller.activeTemplate == CanvasTemplate.ruled ? Colors.green : Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _controller.setTemplate(CanvasTemplate.grid),
+                            child: Text(
+                              "Grid",
+                              style: TextStyle(
+                                color: _controller.activeTemplate == CanvasTemplate.grid ? Colors.green : Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _controller.setTemplate(CanvasTemplate.dotted),
+                            child: Text(
+                              "Dotted",
+                              style: TextStyle(
+                                color: _controller.activeTemplate == CanvasTemplate.dotted ? Colors.green : Colors.grey,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
