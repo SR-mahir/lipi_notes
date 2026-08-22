@@ -12,6 +12,9 @@ class HomeExplorerView extends StatefulWidget {
 
 class _HomeExplorerViewState extends State<HomeExplorerView> {
   late final WorkspaceController _workspaceController;
+  bool _isSearching = false;
+  String _searchQuery = "";
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -22,6 +25,7 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
   @override
   void dispose() {
     _workspaceController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -144,24 +148,75 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
         final activeFolder = _workspaceController.activeFolder;
         final hasActiveFolder = activeFolder != null;
 
+        // Apply metadata query filter
+        final filteredFolders = _workspaceController.folders.where(
+          (f) => f.name.toLowerCase().contains(_searchQuery.toLowerCase())
+        ).toList();
+
+        final filteredNotebooks = _workspaceController.notebooks.where(
+          (n) => n.name.toLowerCase().contains(_searchQuery.toLowerCase())
+        ).toList();
+
         return Scaffold(
           appBar: AppBar(
-            title: Row(
-              children: [
-                const Icon(Icons.book_rounded, color: Colors.green),
-                const SizedBox(width: 8),
-                Text(
-                  hasActiveFolder ? activeFolder.name : "Lipinotes Workspace",
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
+            title: _isSearching
+                ? TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      hintText: "Search notebooks & folders...",
+                      border: InputBorder.none,
+                      hintStyle: TextStyle(color: Colors.grey),
+                    ),
+                    autofocus: true,
+                    style: const TextStyle(fontSize: 16),
+                    onChanged: (val) {
+                      setState(() {
+                        _searchQuery = val;
+                      });
+                    },
+                  )
+                : Row(
+                    children: [
+                      const Icon(Icons.book_rounded, color: Colors.green),
+                      const SizedBox(width: 8),
+                      Text(
+                        hasActiveFolder ? activeFolder.name : "Lipinotes Workspace",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
             leading: hasActiveFolder
                 ? IconButton(
                     icon: const Icon(Icons.arrow_back),
-                    onPressed: () => _workspaceController.navigateToFolder(null),
+                    onPressed: () {
+                      _workspaceController.navigateToFolder(null);
+                      if (_isSearching) {
+                        setState(() {
+                          _isSearching = false;
+                          _searchQuery = "";
+                          _searchController.clear();
+                        });
+                      }
+                    },
                   )
                 : null,
+            actions: [
+              IconButton(
+                icon: Icon(_isSearching ? Icons.close : Icons.search),
+                onPressed: () {
+                  setState(() {
+                    if (_isSearching) {
+                      _isSearching = false;
+                      _searchQuery = "";
+                      _searchController.clear();
+                    } else {
+                      _isSearching = true;
+                    }
+                  });
+                },
+              ),
+              const SizedBox(width: 8),
+            ],
             backgroundColor: Colors.white,
             elevation: 0,
             bottom: PreferredSize(
@@ -170,7 +225,7 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
             ),
           ),
           backgroundColor: const Color(0xFFF7F7F7),
-          body: _workspaceController.folders.isEmpty && _workspaceController.notebooks.isEmpty
+          body: filteredFolders.isEmpty && filteredNotebooks.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -178,12 +233,16 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
                       Icon(Icons.folder_open_outlined, size: 64, color: Colors.grey.shade400),
                       const SizedBox(height: 16),
                       Text(
-                        "Your workspace is empty.",
+                        _searchQuery.isNotEmpty 
+                            ? "No matches found for '$_searchQuery'"
+                            : "Your workspace is empty.",
                         style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        "Tap the Buttons below to add folders or notebooks.",
+                        _searchQuery.isNotEmpty 
+                            ? "Try refining your search keyword."
+                            : "Tap the Buttons below to add folders or notebooks.",
                         style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                       ),
                     ],
@@ -197,16 +256,16 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
                     crossAxisSpacing: 20,
                     childAspectRatio: 0.85,
                   ),
-                  itemCount: _workspaceController.folders.length + _workspaceController.notebooks.length,
+                  itemCount: filteredFolders.length + filteredNotebooks.length,
                   itemBuilder: (context, index) {
-                    final showFolder = index < _workspaceController.folders.length;
+                    final showFolder = index < filteredFolders.length;
                     
                     if (showFolder) {
-                      final folder = _workspaceController.folders[index];
+                      final folder = filteredFolders[index];
                       return _buildFolderCard(folder);
                     } else {
-                      final notebookIndex = index - _workspaceController.folders.length;
-                      final notebook = _workspaceController.notebooks[notebookIndex];
+                      final notebookIndex = index - filteredFolders.length;
+                      final notebook = filteredNotebooks[notebookIndex];
                       return _buildNotebookCard(notebook);
                     }
                   },
@@ -241,7 +300,16 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
   // --- ITEM RENDERING WIDGETS ---
   Widget _buildFolderCard(Folder folder) {
     return GestureDetector(
-      onTap: () => _workspaceController.navigateToFolder(folder),
+      onTap: () {
+        _workspaceController.navigateToFolder(folder);
+        if (_isSearching) {
+          setState(() {
+            _isSearching = false;
+            _searchQuery = "";
+            _searchController.clear();
+          });
+        }
+      },
       child: Card(
         color: Colors.white,
         elevation: 2,

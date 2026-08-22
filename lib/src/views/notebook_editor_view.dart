@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/workspace_models.dart';
 import '../controllers/canvas_controller.dart';
+import '../utils/pdf_exporter.dart';
 import 'drawing_canvas_view.dart';
 
 class NotebookEditorView extends StatefulWidget {
@@ -14,6 +15,7 @@ class NotebookEditorView extends StatefulWidget {
 
 class _NotebookEditorViewState extends State<NotebookEditorView> {
   late final CanvasController _canvasController;
+  bool _isExporting = false;
 
   @override
   void initState() {
@@ -25,6 +27,42 @@ class _NotebookEditorViewState extends State<NotebookEditorView> {
   void dispose() {
     _canvasController.dispose();
     super.dispose();
+  }
+
+  Future<void> _exportToPDF() async {
+    setState(() => _isExporting = true);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(color: Colors.green),
+              SizedBox(width: 20),
+              Text("Compiling Vector PDF..."),
+            ],
+          ),
+        );
+      },
+    );
+
+    try {
+      await PDFExporter.exportNotebook(widget.notebook);
+    } catch (e) {
+      debugPrint("Failed to export notebook: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to export PDF: $e")),
+        );
+      }
+    } finally {
+      if (mounted) {
+        Navigator.pop(context); // Dismiss loading dialog
+        setState(() => _isExporting = false);
+      }
+    }
   }
 
   @override
@@ -56,6 +94,11 @@ class _NotebookEditorViewState extends State<NotebookEditorView> {
               onPressed: () => Navigator.pop(context),
             ),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.share_outlined, color: Colors.green),
+                tooltip: "Export PDF",
+                onPressed: _isExporting ? null : _exportToPDF,
+              ),
               IconButton(
                 icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
                 tooltip: "Delete Current Page",

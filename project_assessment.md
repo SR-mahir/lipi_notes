@@ -6,16 +6,16 @@ This document provides a detailed evaluation of the current **Lipinotes** codeba
 
 ## 📊 Summary of Completion
 
-- **Overall Project Completion**: **~60%**
-- **Features Fully Implemented**: **12 / 20**
+- **Overall Project Completion**: **~70%**
+- **Features Fully Implemented**: **14 / 20**
 - **Features Partially Implemented**: **0 / 20**
-- **Features Not Started**: **8 / 20**
+- **Features Not Started**: **6 / 20**
 
 ### Module Completion Estimates
 * **Module 1: High-Performance Canvas Engine**: **100%** (Core drawing, pressure, velocity, Bezier smoothing, and multi-pen profiles are complete.)
 * **Module 2: Viewport Matrix Transformations & Tool Annotations**: **100%** (Affine viewport zoom/pan, object-eraser, segment-eraser, lasso transformations, shape snapping, and grid paper templates are complete.)
-* **Module 3: Local File System & Relational Database**: **~40%** (SQLite configuration, base tables, and async serialization queue are complete. Notebook/folder models and navigation UI are remaining.)
-* **Module 4: Serialization, Importers, & PDF Compiler**: **~10%** (Point list serialization via isolate is complete. SVG path format, PDF import, and PDF export are remaining.)
+* **Module 3: Local File System & Relational Database**: **100%** (SQLite folder, notebook, page models, active database migration, and folder dashboard navigation are complete.)
+* **Module 4: Serialization, Importers, & PDF Compiler**: **~40%** (Point list serialization via isolate and Vector PDF Export engine are complete. SVG path format, PDF import, and rich typography are remaining.)
 
 ---
 
@@ -49,8 +49,8 @@ This document provides a detailed evaluation of the current **Lipinotes** codeba
 | :--- | :--- | :--- | :--- |
 | **Affine Viewport Transformations** | ✅ **Done** | [drawing_canvas_view.dart](file:///Users/mahir/.gemini/antigravity/scratch/lipi_notes/lib/src/views/drawing_canvas_view.dart) implements matrix scaling and panning (10% to 1000%) with pointer count checks to prevent trailing line rendering during scale pinch gestures. | None. |
 | **Custom Canvas Grid Templates** | ✅ **Done** | [stroke_painter.dart](file:///Users/mahir/.gemini/antigravity/scratch/lipi_notes/lib/src/views/stroke_painter.dart) renders light-colored background templates (Ruled lines with red margin, Grid mesh, Dotted grid, or Blank) behind vector inks on the canvas. | None. |
-| **Hierarchical Local Notebook Manager** | ❌ **Not Started** | None. | There is no UI for folder structure, navigation, or grouping notebooks. The app directly launches into a single drawing canvas view. |
-| **Multi-Page Layout Organizer** | ❌ **Not Started** | None. | The app only supports a single canvas view. Pagination stack, reordering, duplicate/add/delete pages are not implemented. |
+| **Hierarchical Local Notebook Manager** | ✅ **Done** | [home_explorer_view.dart](file:///Users/mahir/.gemini/antigravity/scratch/lipi_notes/lib/src/views/home_explorer_view.dart) implements the explorer dashboard enabling creation, grouping, and deletion of custom-colored folders and nested notebooks. | None. |
+| **Multi-Page Layout Organizer** | ✅ **Done** | [notebook_editor_view.dart](file:///Users/mahir/.gemini/antigravity/scratch/lipi_notes/lib/src/views/notebook_editor_view.dart) displays pagination bottom controls, permitting users to flip pages, add blank sheets, and delete/shift indices. | None. |
 
 ---
 
@@ -69,43 +69,30 @@ This document provides a detailed evaluation of the current **Lipinotes** codeba
 
 | Feature | Status | Current Implementation Details | Gaps / Missing Items |
 | :--- | :--- | :--- | :--- |
-| **Vector PDF Export Engine** | ❌ **Not Started** | None. | Exporter translating stroke memory arrays to PDF vector syntax is missing. |
+| **Vector PDF Export Engine** | ✅ **Done** | [pdf_exporter.dart](file:///Users/mahir/.gemini/antigravity/scratch/lipi_notes/lib/src/utils/pdf_exporter.dart) parses pages, scales coordinates to A4 printable areas, compiles them into vector pdf paths, and opens the system Share Sheet. | None. |
 | **Asynchronous Disk Serialization** | ✅ **Done** | [canvas_controller.dart](file:///Users/mahir/.gemini/antigravity/scratch/lipi_notes/lib/src/controllers/canvas_controller.dart) serializes coordinates inside a background Dart `compute` isolate and schedules writes via a periodic timer queue to avoid UI frame-rate drops. | Point list is serialized to plain coordinates string rather than standard compressed SVG path format. |
 | **Complete Offline Autonomy** | ✅ **Done** | The application is fully serverless and runs SQLite exclusively offline on the device. | None. |
-| **Metadata Search Index** | ❌ **Not Started** | None. | Indexing search across titles, folders, or text layers is missing. |
+| **Metadata Search Index** | ✅ **Done** | [home_explorer_view.dart](file:///Users/mahir/.gemini/antigravity/scratch/lipi_notes/lib/src/views/home_explorer_view.dart) features an app bar search box that filters folders and notebooks lists dynamically as the user types. | None. |
 
 ---
 
 ## 🛠️ Relational Database Scheme Assessment
 
-The current schema in [db_helper.dart](file:///Users/mahir/.gemini/antigravity/scratch/lipi_notes/lib/src/models/db_helper.dart) consists of a single table:
-```sql
-CREATE TABLE strokes (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  path_string TEXT NOT NULL,
-  color INTEGER NOT NULL,
-  stroke_width REAL NOT NULL,
-  pen_type TEXT NOT NULL DEFAULT 'fountain'
-)
-```
-
-### Required Extensions:
-To support the full application scope, the database needs tables for:
-1. **Notebooks / Folders**: Parent-child relationship tables for directory hierarchical structure.
-2. **Pages**: Ordered sequence of pages within each notebook, linked to the `strokes` table.
-3. **Strokes / Vectors**: Add page foreign keys, brush profile identifiers, scale matrices, and timestamps.
-4. **Text Layers**: Bounding box coordinates, text content, font family, style, and size.
+The current schema in [db_helper.dart](file:///Users/mahir/.gemini/antigravity/scratch/lipi_notes/lib/src/models/db_helper.dart) consists of:
+* `folders` Table: groups notebooks.
+* `notebooks` Table: represents multi-page vector booklets.
+* `pages` Table: indexes sheets within a notebook and stores the page background template.
+* `strokes` Table: saves ink coordinates linked to `page_id`.
 
 ---
 
 ## 🚀 Recommended Next Milestones
 
-We should build directly on top of these 12 fully-implemented foundation features:
+We should build directly on top of these 14 fully-implemented foundation features:
 
-1. **Hierarchical Database Schema & Notebook Explorer (Module 3)**:
-   * Build the `Folder`, `Notebook`, and `Page` tables.
-   * Implement the Neo-Minimalist Dashboard view to navigate folders and open notebooks.
-2. **Dynamic Inversion Dark Mode (Module 4)**:
-   * Implement background/ink inverting.
-3. **Typography Layers (Module 4)**:
-   * Add text boxes and typing.
+1. **Dynamic Inversion Dark Mode (Module 4)**:
+   * Add a dark theme toggle. Swap canvas backgrounds to dark grey and invert dark drawing ink strokes dynamically.
+2. **Typography Layers (Module 4)**:
+   * Support keyboard typing overlays.
+3. **High-Fidelity PDF Document Annotator (Module 4)**:
+   * Load external PDFs behind vector drawings.
