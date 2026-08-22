@@ -4,14 +4,15 @@ import '../models/stroke_model.dart';
 import 'stroke_painter.dart';
 
 class DrawingCanvasView extends StatefulWidget {
-  const DrawingCanvasView({super.key});
+  final CanvasController controller;
+
+  const DrawingCanvasView({super.key, required this.controller});
 
   @override
   State<DrawingCanvasView> createState() => _DrawingCanvasViewState();
 }
 
 class _DrawingCanvasViewState extends State<DrawingCanvasView> {
-  late final CanvasController _controller;
   final TransformationController _transformationController = TransformationController();
   final GlobalKey _canvasKey = GlobalKey(); 
   
@@ -19,14 +20,7 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
   bool _showTemplates = false;
 
   @override
-  void initState() {
-    super.initState();
-    _controller = CanvasController();
-  }
-
-  @override
   void dispose() {
-    _controller.dispose();
     _transformationController.dispose();
     super.dispose();
   }
@@ -40,6 +34,7 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
+    final _controller = widget.controller;
 
     return ListenableBuilder(
       listenable: _controller,

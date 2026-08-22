@@ -17,6 +17,7 @@ class StrokePoint {
 
 class DrawingStroke {
   int? id;
+  int? pageId;
   final List<StrokePoint> points;
   final Color color;
   final double strokeWidth;
@@ -25,6 +26,7 @@ class DrawingStroke {
 
   DrawingStroke({
     this.id,
+    this.pageId,
     required this.points,
     required this.color,
     required this.strokeWidth,

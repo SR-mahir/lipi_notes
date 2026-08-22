@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'src/views/drawing_canvas_view.dart';
+import 'src/views/home_explorer_view.dart';
 
 void main() {
   runApp(const LipinotesApp());
@@ -17,11 +17,7 @@ class LipinotesApp extends StatelessWidget {
         useMaterial3: true,
         colorSchemeSeed: Colors.green,
       ),
-      home: const Scaffold(
-        body: SafeArea(
-          child: DrawingCanvasView(),
-        ),
-      ),
+      home: const HomeExplorerView(),
     );
   }
 }

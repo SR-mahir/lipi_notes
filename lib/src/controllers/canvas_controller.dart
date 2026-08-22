@@ -3,9 +3,14 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../models/stroke_model.dart';
+import '../models/workspace_models.dart';
 import '../models/db_helper.dart';
 
 class CanvasController extends ChangeNotifier {
+  final Notebook notebook;
+  List<NotebookPage> _pages = [];
+  int _currentPageIndex = 0;
+
   final List<DrawingStroke> _history = [];
   List<StrokePoint> _currentPoints = [];
   CanvasTool _activeTool = CanvasTool.pen;
@@ -24,6 +29,10 @@ class CanvasController extends ChangeNotifier {
   final List<int> _pendingDeletions = [];
   Timer? _autoSaveTimer;
 
+  List<NotebookPage> get pages => _pages;
+  int get currentPageIndex => _currentPageIndex;
+  NotebookPage? get currentPage => _pages.isNotEmpty ? _pages[_currentPageIndex] : null;
+
   List<DrawingStroke> get history => _history;
   CanvasTool get activeTool => _activeTool;
   PenType get activePenType => _activePenType;
@@ -32,17 +41,18 @@ class CanvasController extends ChangeNotifier {
   List<DrawingStroke> get selectedStrokes => _selectedStrokes;
   Rect? get selectionBounds => _selectionBounds;
 
-  DrawingStroke? get currentStroke => _currentPoints.isNotEmpty
+  DrawingStroke? get currentStroke => _currentPoints.isNotEmpty && _pages.isNotEmpty
       ? DrawingStroke(
           points: _currentPoints,
           color: Colors.black,
           strokeWidth: 4.0,
           penType: _activePenType,
+          pageId: _pages[_currentPageIndex].id,
         )
       : null;
 
-  CanvasController() {
-    loadStrokesFromDB();
+  CanvasController({required this.notebook}) {
+    _loadPagesAndStrokes();
     _startAutoSaveTimer();
   }
 
@@ -53,15 +63,34 @@ class CanvasController extends ChangeNotifier {
     super.dispose();
   }
 
+  Future<void> _loadPagesAndStrokes() async {
+    try {
+      final pageData = await DBHelper.getPagesForNotebook(notebook.id!);
+      _pages = pageData.map((map) => NotebookPage.fromMap(map)).toList();
+
+      if (_pages.isEmpty) {
+        final id = await DBHelper.insertPage(notebook.id!, 0, 'blank');
+        _pages = [NotebookPage(id: id, notebookId: notebook.id!, pageIndex: 0, backgroundType: 'blank')];
+      }
+
+      _currentPageIndex = 0;
+      _activeTemplate = _parseBackgroundType(_pages[_currentPageIndex].backgroundType);
+      await loadStrokesFromDB();
+    } catch (e) {
+      debugPrint("Failed to load pages and strokes: $e");
+    }
+  }
+
+  CanvasTemplate _parseBackgroundType(String type) {
+    return CanvasTemplate.values.firstWhere((e) => e.name == type, orElse: () => CanvasTemplate.blank);
+  }
+
   void setTool(CanvasTool tool) {
     finalizeCurrentStroke();
-    
-    // Clear selection if switching away from lasso
     if (_activeTool == CanvasTool.lasso && tool != CanvasTool.lasso) {
       _selectedStrokes.clear();
       _selectionBounds = null;
     }
-    
     _activeTool = tool;
     notifyListeners();
   }
@@ -72,9 +101,21 @@ class CanvasController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setTemplate(CanvasTemplate template) {
+  Future<void> setTemplate(CanvasTemplate template) async {
     _activeTemplate = template;
     notifyListeners();
+    if (_pages.isNotEmpty) {
+      final pageId = _pages[_currentPageIndex].id!;
+      await DBHelper.updatePageBackground(pageId, template.name);
+
+      final oldPage = _pages[_currentPageIndex];
+      _pages[_currentPageIndex] = NotebookPage(
+        id: oldPage.id,
+        notebookId: oldPage.notebookId,
+        pageIndex: oldPage.pageIndex,
+        backgroundType: template.name,
+      );
+    }
   }
 
   void _startAutoSaveTimer() {
@@ -90,8 +131,10 @@ class CanvasController extends ChangeNotifier {
 
   // --- DATABASE HOOK ACTIONS ---
   Future<void> loadStrokesFromDB() async {
+    if (_pages.isEmpty) return;
     try {
-      final savedData = await DBHelper.getSavedStrokes();
+      final pageId = _pages[_currentPageIndex].id!;
+      final savedData = await DBHelper.getSavedStrokesForPage(pageId);
       _history.clear();
       
       for (var row in savedData) {
@@ -106,6 +149,7 @@ class CanvasController extends ChangeNotifier {
           _history.add(
             DrawingStroke(
               id: row['id'] as int?,
+              pageId: row['page_id'] as int?,
               points: pointsList,
               color: Color(row['color'] as int),
               strokeWidth: row['stroke_width'] as double,
@@ -151,6 +195,7 @@ class CanvasController extends ChangeNotifier {
           stroke.color.toARGB32(), 
           stroke.strokeWidth,
           stroke.penType.name,
+          stroke.pageId!,
         );
         stroke.id = id;
       } catch (e) {
@@ -181,6 +226,7 @@ class CanvasController extends ChangeNotifier {
           stroke.color.toARGB32(), 
           stroke.strokeWidth,
           stroke.penType.name,
+          stroke.pageId!,
         );
       } catch (_) {}
     }
@@ -201,8 +247,84 @@ class CanvasController extends ChangeNotifier {
     }).toList();
   }
 
+  // --- PAGINATION ACTIONS ---
+  Future<void> nextPage() async {
+    if (_currentPageIndex < _pages.length - 1) {
+      finalizeCurrentStroke();
+      await _performPeriodicSave();
+
+      _currentPageIndex++;
+      _activeTemplate = _parseBackgroundType(_pages[_currentPageIndex].backgroundType);
+      await loadStrokesFromDB();
+    }
+  }
+
+  Future<void> prevPage() async {
+    if (_currentPageIndex > 0) {
+      finalizeCurrentStroke();
+      await _performPeriodicSave();
+
+      _currentPageIndex--;
+      _activeTemplate = _parseBackgroundType(_pages[_currentPageIndex].backgroundType);
+      await loadStrokesFromDB();
+    }
+  }
+
+  Future<void> addPage() async {
+    finalizeCurrentStroke();
+    await _performPeriodicSave();
+
+    final newIndex = _pages.length;
+    final pageId = await DBHelper.insertPage(notebook.id!, newIndex, 'blank');
+    final newPage = NotebookPage(
+      id: pageId,
+      notebookId: notebook.id!,
+      pageIndex: newIndex,
+      backgroundType: 'blank',
+    );
+
+    _pages.add(newPage);
+    _currentPageIndex = newIndex;
+    _activeTemplate = CanvasTemplate.blank;
+    _history.clear();
+    notifyListeners();
+  }
+
+  Future<void> deleteCurrentPage() async {
+    if (_pages.length <= 1) return; // Keep at least one page
+
+    finalizeCurrentStroke();
+    
+    final pageId = _pages[_currentPageIndex].id!;
+    _unsavedStrokes.removeWhere((s) => s.pageId == pageId);
+
+    await DBHelper.deletePage(pageId);
+    _pages.removeAt(_currentPageIndex);
+
+    // Adjust the indices of all later pages
+    for (int i = _currentPageIndex; i < _pages.length; i++) {
+      final oldPage = _pages[i];
+      await DBHelper.updatePageIndex(oldPage.id!, i);
+      _pages[i] = NotebookPage(
+        id: oldPage.id,
+        notebookId: oldPage.notebookId,
+        pageIndex: i,
+        backgroundType: oldPage.backgroundType,
+      );
+    }
+
+    if (_currentPageIndex >= _pages.length) {
+      _currentPageIndex = _pages.length - 1;
+    }
+
+    _activeTemplate = _parseBackgroundType(_pages[_currentPageIndex].backgroundType);
+    await loadStrokesFromDB();
+  }
+
   // --- TOUCH POINTER HANDLING ACTIONS ---
   void handlePointerDown(PointerEvent event, Offset canvasOffset, Matrix4 transformMatrix) {
+    if (_pages.isEmpty) return;
+
     if (_activeTool == CanvasTool.objectEraser) {
       _eraseStrokesAt(canvasOffset);
       return;
@@ -235,6 +357,8 @@ class CanvasController extends ChangeNotifier {
   }
 
   void handlePointerMove(PointerEvent event, Offset canvasOffset, Matrix4 transformMatrix) {
+    if (_pages.isEmpty) return;
+
     if (_activeTool == CanvasTool.objectEraser) {
       _eraseStrokesAt(canvasOffset);
       return;
@@ -265,6 +389,8 @@ class CanvasController extends ChangeNotifier {
   }
 
   void handlePointerUp(PointerEvent event) {
+    if (_pages.isEmpty) return;
+
     if (_activeTool == CanvasTool.objectEraser || _activeTool == CanvasTool.segmentEraser) return;
     
     if (_activeTool == CanvasTool.lasso) {
@@ -273,7 +399,7 @@ class CanvasController extends ChangeNotifier {
         _lastDragPoint = null;
       } else {
         if (_lassoPath.length >= 3) {
-          _lassoPath.add(_lassoPath.first); // Close loop
+          _lassoPath.add(_lassoPath.first);
           _performLassoSelection();
         }
         _lassoPath.clear();
@@ -286,8 +412,7 @@ class CanvasController extends ChangeNotifier {
   }
 
   void finalizeCurrentStroke() {
-    if (_currentPoints.isNotEmpty) {
-      // Check if user paused at the end of the stroke (Shape Snapping gesture)
+    if (_currentPoints.isNotEmpty && _pages.isNotEmpty) {
       if (_currentPoints.length >= 4) {
         final last = _currentPoints.last;
         final tDiff = last.timestamp.difference(_currentPoints[_currentPoints.length - 4].timestamp).inMilliseconds;
@@ -297,7 +422,6 @@ class CanvasController extends ChangeNotifier {
           if (d > dMax) dMax = d;
         }
         
-        // If final movement stopped for ~400ms within a 12px area, execute snapping
         if (tDiff >= 400 && dMax <= 12.0) {
           final snappedPoints = _recognizeShape(_currentPoints);
           if (snappedPoints != null) {
@@ -311,6 +435,7 @@ class CanvasController extends ChangeNotifier {
         color: Colors.black,
         strokeWidth: 4.0,
         penType: _activePenType,
+        pageId: _pages[_currentPageIndex].id,
       );
 
       _history.add(newStroke);
@@ -395,6 +520,7 @@ class CanvasController extends ChangeNotifier {
               color: stroke.color,
               strokeWidth: stroke.strokeWidth,
               penType: stroke.penType,
+              pageId: stroke.pageId,
             );
             _history.insert(i, newSub);
             _unsavedStrokes.add(newSub);
@@ -420,7 +546,6 @@ class CanvasController extends ChangeNotifier {
         }
       }
       
-      // If majority of the stroke coordinates are lassoed, select it
       if (pointsInside > stroke.points.length * 0.5) {
         _selectedStrokes.add(stroke);
       }
@@ -465,6 +590,7 @@ class CanvasController extends ChangeNotifier {
         color: s.color,
         strokeWidth: s.strokeWidth,
         penType: s.penType,
+        pageId: s.pageId,
       );
 
       if (s.id != null) {
@@ -513,12 +639,10 @@ class CanvasController extends ChangeNotifier {
     final last = points.last.point;
     final chord = (last - first).distance;
 
-    // Line Test
     if (chord / pathLength > 0.95) {
       return [points.first, points.last];
     }
 
-    // Centroid and bounding box
     double sumX = 0, sumY = 0;
     for (var p in points) {
       sumX += p.point.dx;
@@ -538,7 +662,6 @@ class CanvasController extends ChangeNotifier {
     }
     final bbox = Rect.fromLTRB(minX, minY, maxX, maxY);
 
-    // Circle Test
     double sumRadius = 0;
     for (var p in points) {
       sumRadius += (p.point - centroid).distance;
@@ -569,12 +692,10 @@ class CanvasController extends ChangeNotifier {
       return snapped;
     }
 
-    // Simplify points via RDP for Polygon tests
     final pts = points.map((p) => p.point).toList();
     final epsilon = bbox.width * 0.08;
     final simplified = _rdp(pts, epsilon);
 
-    // Triangle check (4 vertices closed)
     if (simplified.length == 4) {
       final baseTime = points.first.timestamp;
       return [
@@ -585,7 +706,6 @@ class CanvasController extends ChangeNotifier {
       ];
     }
 
-    // Rectangle check (5 vertices closed)
     if (simplified.length == 5) {
       final baseTime = points.first.timestamp;
       final corners = [
@@ -638,6 +758,10 @@ class CanvasController extends ChangeNotifier {
     _selectedStrokes.clear();
     _selectionBounds = null;
     notifyListeners();
-    await DBHelper.clearAllStrokes();
+    if (_pages.isNotEmpty) {
+      final pageId = _pages[_currentPageIndex].id!;
+      final db = await DBHelper.database;
+      await db.delete('strokes', where: 'page_id = ?', whereArgs: [pageId]);
+    }
   }
 }
