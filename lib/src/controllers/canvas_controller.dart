@@ -16,6 +16,7 @@ class CanvasController extends ChangeNotifier {
   CanvasTool _activeTool = CanvasTool.pen;
   PenType _activePenType = PenType.fountain;
   CanvasTemplate _activeTemplate = CanvasTemplate.blank;
+  bool _isDarkMode = false;
 
   // Lasso and selection properties
   final List<Offset> _lassoPath = [];
@@ -37,6 +38,7 @@ class CanvasController extends ChangeNotifier {
   CanvasTool get activeTool => _activeTool;
   PenType get activePenType => _activePenType;
   CanvasTemplate get activeTemplate => _activeTemplate;
+  bool get isDarkMode => _isDarkMode;
   List<Offset> get lassoPath => _lassoPath;
   List<DrawingStroke> get selectedStrokes => _selectedStrokes;
   Rect? get selectionBounds => _selectionBounds;
@@ -116,6 +118,11 @@ class CanvasController extends ChangeNotifier {
         backgroundType: template.name,
       );
     }
+  }
+
+  void toggleDarkMode() {
+    _isDarkMode = !_isDarkMode;
+    notifyListeners();
   }
 
   void _startAutoSaveTimer() {

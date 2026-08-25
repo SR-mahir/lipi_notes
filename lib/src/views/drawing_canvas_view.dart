@@ -77,7 +77,7 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                 _controller.handlePointerUp(event);
               },
               child: Container(
-                color: const Color(0xFFEAEAEA), 
+                color: _controller.isDarkMode ? const Color(0xFF121212) : const Color(0xFFEAEAEA), 
                 width: double.infinity,
                 height: double.infinity,
                 child: Center(
@@ -96,11 +96,13 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                           width: screenSize.width * 0.95, 
                           height: screenSize.height * 0.90,
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: _controller.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
                             borderRadius: BorderRadius.circular(4),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.1),
+                                color: _controller.isDarkMode 
+                                    ? Colors.white.withValues(alpha: 0.03) 
+                                    : Colors.black.withValues(alpha: 0.1),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
                               )
@@ -115,6 +117,7 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                                   lassoPath: _controller.lassoPath,
                                   selectionBounds: _controller.selectionBounds,
                                   activeTemplate: _controller.activeTemplate,
+                                  isDarkMode: _controller.isDarkMode,
                                 ),
                                 child: const SizedBox.expand(),
                               ),

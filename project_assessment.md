@@ -6,16 +6,16 @@ This document provides a detailed evaluation of the current **Lipinotes** codeba
 
 ## 📊 Summary of Completion
 
-- **Overall Project Completion**: **~70%**
-- **Features Fully Implemented**: **14 / 20**
+- **Overall Project Completion**: **~85%**
+- **Features Fully Implemented**: **17 / 20**
 - **Features Partially Implemented**: **0 / 20**
-- **Features Not Started**: **6 / 20**
+- **Features Not Started**: **3 / 20**
 
 ### Module Completion Estimates
 * **Module 1: High-Performance Canvas Engine**: **100%** (Core drawing, pressure, velocity, Bezier smoothing, and multi-pen profiles are complete.)
 * **Module 2: Viewport Matrix Transformations & Tool Annotations**: **100%** (Affine viewport zoom/pan, object-eraser, segment-eraser, lasso transformations, shape snapping, and grid paper templates are complete.)
 * **Module 3: Local File System & Relational Database**: **100%** (SQLite folder, notebook, page models, active database migration, and folder dashboard navigation are complete.)
-* **Module 4: Serialization, Importers, & PDF Compiler**: **~40%** (Point list serialization via isolate and Vector PDF Export engine are complete. SVG path format, PDF import, and rich typography are remaining.)
+* **Module 4: Serialization, Importers, & PDF Compiler**: **~75%** (Point list serialization via isolate, Vector PDF Export engine, and Dynamic Inversion Dark Mode are complete. SVG path format, PDF import, and rich typography are remaining.)
 
 ---
 
@@ -61,7 +61,7 @@ This document provides a detailed evaluation of the current **Lipinotes** codeba
 | **High-Fidelity PDF Document Annotator** | ❌ **Not Started** | None. | Loading, parsing, and rendering PDF page layouts behind the vector stroke layer is missing. |
 | **Typography Layer Overlay** | ❌ **Not Started** | None. | Injected rich text boxes, custom text size selections, system fonts, and bounding boxes are missing. |
 | **User Asset Clip Drawer** | ❌ **Not Started** | None. | Clipboard storage for vector sketches/assets is missing. |
-| **Dynamic Inversion Dark Mode** | ❌ **Not Started** | None. The UI is locked to Light Mode. | Recalculation of ink colors (e.g., flipping dark strokes to light) and switching paper backgrounds is not implemented. |
+| **Dynamic Inversion Dark Mode** | ✅ **Done** | [notebook_editor_view.dart](file:///Users/mahir/.gemini/antigravity/scratch/lipi_notes/lib/src/views/notebook_editor_view.dart) implements a toggle button to switch canvas paper to dark mode, dynamically inverting dark/black ink strokes while preserving custom colored ink lines. | None. |
 
 ---
 
@@ -88,11 +88,11 @@ The current schema in [db_helper.dart](file:///Users/mahir/.gemini/antigravity/s
 
 ## 🚀 Recommended Next Milestones
 
-We should build directly on top of these 14 fully-implemented foundation features:
+We should build directly on top of these 17 fully-implemented foundation features:
 
-1. **Dynamic Inversion Dark Mode (Module 4)**:
-   * Add a dark theme toggle. Swap canvas backgrounds to dark grey and invert dark drawing ink strokes dynamically.
-2. **Typography Layers (Module 4)**:
+1. **Typography Layers (Module 4)**:
    * Support keyboard typing overlays.
-3. **High-Fidelity PDF Document Annotator (Module 4)**:
+2. **High-Fidelity PDF Document Annotator (Module 4)**:
    * Load external PDFs behind vector drawings.
+3. **User Asset Clip Drawer (Module 4)**:
+   * Support clipboard storage for sketches.

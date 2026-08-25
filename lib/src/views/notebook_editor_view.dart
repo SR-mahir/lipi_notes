@@ -95,6 +95,16 @@ class _NotebookEditorViewState extends State<NotebookEditorView> {
             ),
             actions: [
               IconButton(
+                icon: Icon(
+                  _canvasController.isDarkMode 
+                      ? Icons.light_mode_outlined 
+                      : Icons.dark_mode_outlined,
+                  color: Colors.green,
+                ),
+                tooltip: _canvasController.isDarkMode ? "Light Mode" : "Dark Mode",
+                onPressed: () => _canvasController.toggleDarkMode(),
+              ),
+              IconButton(
                 icon: const Icon(Icons.share_outlined, color: Colors.green),
                 tooltip: "Export PDF",
                 onPressed: _isExporting ? null : _exportToPDF,

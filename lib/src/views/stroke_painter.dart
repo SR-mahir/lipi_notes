@@ -7,6 +7,7 @@ class StrokePainter extends CustomPainter {
   final List<Offset> lassoPath;
   final Rect? selectionBounds;
   final CanvasTemplate activeTemplate;
+  final bool isDarkMode;
 
   StrokePainter({
     required this.history,
@@ -14,6 +15,7 @@ class StrokePainter extends CustomPainter {
     this.lassoPath = const [],
     this.selectionBounds,
     this.activeTemplate = CanvasTemplate.blank,
+    this.isDarkMode = false,
   });
 
   @override
@@ -91,15 +93,26 @@ class StrokePainter extends CustomPainter {
   void _drawStroke(Canvas canvas, DrawingStroke stroke) {
     if (stroke.points.isEmpty) return;
     
+    Color paintColor = stroke.color;
+    if (isDarkMode) {
+      if (paintColor.computeLuminance() < 0.15) {
+        paintColor = Colors.white;
+      }
+    } else {
+      if (paintColor.computeLuminance() > 0.85) {
+        paintColor = Colors.black;
+      }
+    }
+    
     final paint = Paint()
-      ..color = stroke.color
+      ..color = paintColor
       ..strokeCap = stroke.penType == PenType.highlighter ? StrokeCap.square : StrokeCap.round
       ..strokeJoin = stroke.penType == PenType.highlighter ? StrokeJoin.miter : StrokeJoin.round
       ..style = PaintingStyle.stroke
       ..isAntiAlias = true;
 
     if (stroke.penType == PenType.highlighter) {
-      paint.color = stroke.color.withOpacity(0.35);
+      paint.color = paintColor.withOpacity(0.35);
       paint.strokeWidth = stroke.strokeWidth * 3.5;
     } else if (stroke.penType == PenType.brush) {
       paint.maskFilter = MaskFilter.blur(BlurStyle.normal, stroke.strokeWidth * 0.18);
@@ -187,7 +200,9 @@ class StrokePainter extends CustomPainter {
     if (activeTemplate == CanvasTemplate.blank) return;
 
     final gridPaint = Paint()
-      ..color = Colors.blue.withOpacity(0.08)
+      ..color = isDarkMode 
+          ? Colors.white.withOpacity(0.08) 
+          : Colors.blue.withOpacity(0.08)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
@@ -197,7 +212,9 @@ class StrokePainter extends CustomPainter {
         canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
       }
       final marginPaint = Paint()
-        ..color = Colors.red.withOpacity(0.18)
+        ..color = isDarkMode 
+            ? Colors.red.withOpacity(0.35) 
+            : Colors.red.withOpacity(0.18)
         ..strokeWidth = 1.5
         ..style = PaintingStyle.stroke;
       canvas.drawLine(const Offset(70, 0), Offset(70, size.height), marginPaint);
@@ -212,7 +229,9 @@ class StrokePainter extends CustomPainter {
     } else if (activeTemplate == CanvasTemplate.dotted) {
       const double dotSpacing = 24.0;
       final dotPaint = Paint()
-        ..color = Colors.blue.withOpacity(0.22)
+        ..color = isDarkMode 
+            ? Colors.white.withOpacity(0.2) 
+            : Colors.blue.withOpacity(0.22)
         ..style = PaintingStyle.fill;
       for (double y = dotSpacing; y < size.height; y += dotSpacing) {
         for (double x = dotSpacing; x < size.width; x += dotSpacing) {
