@@ -1,5 +1,5 @@
 import 'dart:ui';
-enum CanvasTool { pen, objectEraser, segmentEraser, lasso }
+enum CanvasTool { pen, objectEraser, segmentEraser, lasso, text }
 enum PenType { fountain, ballpoint, highlighter, brush }
 enum CanvasTemplate { blank, ruled, grid, dotted }
 

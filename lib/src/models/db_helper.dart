@@ -16,7 +16,7 @@ class DBHelper {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         // Version 3: Create full hierarchical notebook schema
         await db.execute('''
@@ -57,13 +57,28 @@ class DBHelper {
             FOREIGN KEY (page_id) REFERENCES pages (id) ON DELETE CASCADE
           )
         ''');
+
+        // Version 4: Create text_boxes table
+        await db.execute('''
+          CREATE TABLE text_boxes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            page_id INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            width REAL NOT NULL,
+            height REAL NOT NULL,
+            font_size REAL NOT NULL,
+            color INTEGER NOT NULL,
+            FOREIGN KEY (page_id) REFERENCES pages (id) ON DELETE CASCADE
+          )
+        ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await db.execute("ALTER TABLE strokes ADD COLUMN pen_type TEXT NOT NULL DEFAULT 'fountain'");
         }
         if (oldVersion < 3) {
-          // Create new tables
           await db.execute('''
             CREATE TABLE folders (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,10 +104,8 @@ class DBHelper {
             )
           ''');
 
-          // Alter strokes to add page_id column
           await db.execute("ALTER TABLE strokes ADD COLUMN page_id INTEGER");
 
-          // Migrate old data if any strokes exist
           final List<Map<String, dynamic>> existingStrokes = await db.rawQuery('SELECT count(*) as count FROM strokes');
           final count = existingStrokes.first['count'] as int? ?? 0;
           if (count > 0) {
@@ -101,6 +114,22 @@ class DBHelper {
             final pageId = await db.insert('pages', {'notebook_id': notebookId, 'page_index': 0, 'background_type': 'blank'});
             await db.update('strokes', {'page_id': pageId});
           }
+        }
+        if (oldVersion < 4) {
+          await db.execute('''
+            CREATE TABLE text_boxes (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              page_id INTEGER NOT NULL,
+              text TEXT NOT NULL,
+              x REAL NOT NULL,
+              y REAL NOT NULL,
+              width REAL NOT NULL,
+              height REAL NOT NULL,
+              font_size REAL NOT NULL,
+              color INTEGER NOT NULL,
+              FOREIGN KEY (page_id) REFERENCES pages (id) ON DELETE CASCADE
+            )
+          ''');
         }
       },
     );
@@ -229,5 +258,26 @@ class DBHelper {
   static Future<int> deletePage(int id) async {
     final db = await database;
     return await db.delete('pages', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // --- TEXT BOXES CRUD ---
+  static Future<int> insertTextBox(Map<String, dynamic> row) async {
+    final db = await database;
+    return await db.insert('text_boxes', row);
+  }
+
+  static Future<List<Map<String, dynamic>>> getTextBoxesForPage(int pageId) async {
+    final db = await database;
+    return await db.query('text_boxes', where: 'page_id = ?', whereArgs: [pageId], orderBy: 'id ASC');
+  }
+
+  static Future<int> updateTextBox(int id, Map<String, dynamic> row) async {
+    final db = await database;
+    return await db.update('text_boxes', row, where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<int> deleteTextBox(int id) async {
+    final db = await database;
+    return await db.delete('text_boxes', where: 'id = ?', whereArgs: [id]);
   }
 }

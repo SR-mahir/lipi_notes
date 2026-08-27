@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../models/stroke_model.dart';
 import '../models/workspace_models.dart';
+import '../models/text_box_model.dart';
 import '../models/db_helper.dart';
 
 class CanvasController extends ChangeNotifier {
@@ -17,6 +18,7 @@ class CanvasController extends ChangeNotifier {
   PenType _activePenType = PenType.fountain;
   CanvasTemplate _activeTemplate = CanvasTemplate.blank;
   bool _isDarkMode = false;
+  List<TextBoxModel> _textBoxes = [];
 
   // Lasso and selection properties
   final List<Offset> _lassoPath = [];
@@ -39,6 +41,7 @@ class CanvasController extends ChangeNotifier {
   PenType get activePenType => _activePenType;
   CanvasTemplate get activeTemplate => _activeTemplate;
   bool get isDarkMode => _isDarkMode;
+  List<TextBoxModel> get textBoxes => _textBoxes;
   List<Offset> get lassoPath => _lassoPath;
   List<DrawingStroke> get selectedStrokes => _selectedStrokes;
   Rect? get selectionBounds => _selectionBounds;
@@ -166,8 +169,77 @@ class CanvasController extends ChangeNotifier {
         }
       }
       notifyListeners();
+      await loadTextBoxesFromDB();
     } catch (e) {
       debugPrint("Failed to load strokes from database: $e");
+    }
+  }
+
+  Future<void> loadTextBoxesFromDB() async {
+    if (_pages.isEmpty) return;
+    try {
+      final pageId = _pages[_currentPageIndex].id!;
+      final savedData = await DBHelper.getTextBoxesForPage(pageId);
+      _textBoxes = savedData.map((row) => TextBoxModel.fromMap(row)).toList();
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Failed to load text boxes from database: $e");
+    }
+  }
+
+  Future<void> addTextBox(String text, Offset position, double fontSize) async {
+    if (_pages.isEmpty) return;
+    final pageId = _pages[_currentPageIndex].id!;
+    final newBox = TextBoxModel(
+      pageId: pageId,
+      text: text,
+      x: position.dx,
+      y: position.dy,
+      fontSize: fontSize,
+      colorValue: _isDarkMode ? 0xFFFFFFFF : 0xFF000000,
+    );
+    try {
+      final id = await DBHelper.insertTextBox(newBox.toMap());
+      _textBoxes.add(newBox.copyWith(id: id));
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Failed to insert text box: $e");
+    }
+  }
+
+  Future<void> updateTextBox(TextBoxModel updatedBox) async {
+    try {
+      await DBHelper.updateTextBox(updatedBox.id!, updatedBox.toMap());
+      final index = _textBoxes.indexWhere((tb) => tb.id == updatedBox.id);
+      if (index != -1) {
+        _textBoxes[index] = updatedBox;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Failed to update text box: $e");
+    }
+  }
+
+  void moveTextBox(TextBoxModel textBox, Offset delta) {
+    final updatedBox = textBox.copyWith(
+      x: textBox.x + delta.dx,
+      y: textBox.y + delta.dy,
+    );
+    final index = _textBoxes.indexWhere((tb) => tb.id == textBox.id);
+    if (index != -1) {
+      _textBoxes[index] = updatedBox;
+      notifyListeners();
+    }
+    DBHelper.updateTextBox(updatedBox.id!, updatedBox.toMap());
+  }
+
+  Future<void> deleteTextBox(int id) async {
+    try {
+      await DBHelper.deleteTextBox(id);
+      _textBoxes.removeWhere((tb) => tb.id == id);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Failed to delete text box: $e");
     }
   }
 
@@ -764,11 +836,13 @@ class CanvasController extends ChangeNotifier {
     _unsavedStrokes.clear();
     _selectedStrokes.clear();
     _selectionBounds = null;
+    _textBoxes.clear();
     notifyListeners();
     if (_pages.isNotEmpty) {
       final pageId = _pages[_currentPageIndex].id!;
       final db = await DBHelper.database;
       await db.delete('strokes', where: 'page_id = ?', whereArgs: [pageId]);
+      await db.delete('text_boxes', where: 'page_id = ?', whereArgs: [pageId]);
     }
   }
 }

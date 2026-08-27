@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../controllers/canvas_controller.dart';
 import '../models/stroke_model.dart';
+import '../models/text_box_model.dart';
 import 'stroke_painter.dart';
 
 class DrawingCanvasView extends StatefulWidget {
@@ -47,17 +48,21 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                 setState(() => _pointerCount++);
                 if (_pointerCount == 1) {
                   final canvasOffset = _getAbsoluteCanvasOffset(event.position);
-                  _controller.handlePointerDown(
-                    event, 
-                    canvasOffset,
-                    _transformationController.value,
-                  );
+                  if (_controller.activeTool == CanvasTool.text) {
+                    _showAddTextBoxDialog(context, canvasOffset);
+                  } else {
+                    _controller.handlePointerDown(
+                      event, 
+                      canvasOffset,
+                      _transformationController.value,
+                    );
+                  }
                 } else if (_pointerCount >= 2) {
                   _controller.finalizeCurrentStroke();
                 }
               },
               onPointerMove: (event) {
-                if (_pointerCount == 1) {
+                if (_pointerCount == 1 && _controller.activeTool != CanvasTool.text) {
                   final canvasOffset = _getAbsoluteCanvasOffset(event.position);
                   _controller.handlePointerMove(
                     event, 
@@ -68,13 +73,15 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
               },
               onPointerUp: (event) {
                 setState(() => _pointerCount = (_pointerCount - 1).clamp(0, 10));
-                if (_pointerCount == 0) {
+                if (_pointerCount == 0 && _controller.activeTool != CanvasTool.text) {
                   _controller.handlePointerUp(event);
                 }
               },
               onPointerCancel: (event) {
                 setState(() => _pointerCount = 0);
-                _controller.handlePointerUp(event);
+                if (_controller.activeTool != CanvasTool.text) {
+                  _controller.handlePointerUp(event);
+                }
               },
               child: Container(
                 color: _controller.isDarkMode ? const Color(0xFF121212) : const Color(0xFFEAEAEA), 
@@ -110,16 +117,54 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                           ),
                           child: ClipRect(
                             child: RepaintBoundary(
-                              child: CustomPaint(
-                                painter: StrokePainter(
-                                  history: _controller.history,
-                                  currentStroke: _controller.currentStroke,
-                                  lassoPath: _controller.lassoPath,
-                                  selectionBounds: _controller.selectionBounds,
-                                  activeTemplate: _controller.activeTemplate,
-                                  isDarkMode: _controller.isDarkMode,
-                                ),
-                                child: const SizedBox.expand(),
+                              child: Stack(
+                                children: [
+                                  CustomPaint(
+                                    painter: StrokePainter(
+                                      history: _controller.history,
+                                      currentStroke: _controller.currentStroke,
+                                      lassoPath: _controller.lassoPath,
+                                      selectionBounds: _controller.selectionBounds,
+                                      activeTemplate: _controller.activeTemplate,
+                                      isDarkMode: _controller.isDarkMode,
+                                    ),
+                                    child: const SizedBox.expand(),
+                                  ),
+                                  ..._controller.textBoxes.map((tb) {
+                                    return Positioned(
+                                      left: tb.x,
+                                      top: tb.y,
+                                      child: GestureDetector(
+                                        onPanUpdate: (details) {
+                                          _controller.moveTextBox(tb, details.delta);
+                                        },
+                                        onTap: () {
+                                          _showEditTextBoxDialog(context, tb);
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            border: Border.all(
+                                              color: _controller.activeTool == CanvasTool.text
+                                                  ? Colors.green.withOpacity(0.5)
+                                                  : Colors.transparent,
+                                              width: 1,
+                                            ),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            tb.text,
+                                            style: TextStyle(
+                                              fontSize: tb.fontSize,
+                                              color: Color(tb.colorValue),
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                ],
                               ),
                             ),
                           ),
@@ -181,6 +226,13 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                           color: _controller.activeTool == CanvasTool.lasso ? Colors.green : Colors.grey,
                           onPressed: () => _controller.setTool(CanvasTool.lasso),
                           tooltip: "Lasso Selection",
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.title_rounded),
+                          color: _controller.activeTool == CanvasTool.text ? Colors.green : Colors.grey,
+                          onPressed: () => _controller.setTool(CanvasTool.text),
+                          tooltip: "Text Box Overlay",
                         ),
                         const SizedBox(width: 8),
                         IconButton(
@@ -333,6 +385,156 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _showAddTextBoxDialog(BuildContext context, Offset position) {
+    final textController = TextEditingController();
+    double fontSize = 18.0;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("Create Text Box"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: textController,
+                    decoration: const InputDecoration(
+                      hintText: "Enter your text...",
+                      border: OutlineInputBorder(),
+                    ),
+                    autofocus: true,
+                    maxLines: null,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Text("Font Size:"),
+                      Expanded(
+                        child: Slider(
+                          min: 12,
+                          max: 64,
+                          divisions: 13,
+                          value: fontSize,
+                          label: "${fontSize.round()}px",
+                          onChanged: (val) {
+                            setDialogState(() {
+                              fontSize = val;
+                            });
+                          },
+                        ),
+                      ),
+                      Text("${fontSize.round()}px"),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final text = textController.text.trim();
+                    if (text.isNotEmpty) {
+                      widget.controller.addTextBox(text, position, fontSize);
+                    }
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Create"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEditTextBoxDialog(BuildContext context, TextBoxModel textBox) {
+    final textController = TextEditingController(text: textBox.text);
+    double fontSize = textBox.fontSize;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("Edit Text Box"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: textController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: null,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Text("Font Size:"),
+                      Expanded(
+                        child: Slider(
+                          min: 12,
+                          max: 64,
+                          divisions: 13,
+                          value: fontSize,
+                          label: "${fontSize.round()}px",
+                          onChanged: (val) {
+                            setDialogState(() {
+                              fontSize = val;
+                            });
+                          },
+                        ),
+                      ),
+                      Text("${fontSize.round()}px"),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    widget.controller.deleteTextBox(textBox.id!);
+                    Navigator.pop(context);
+                  },
+                  style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                  child: const Text("Delete"),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final text = textController.text.trim();
+                    if (text.isNotEmpty) {
+                      widget.controller.updateTextBox(
+                        textBox.copyWith(
+                          text: text,
+                          fontSize: fontSize,
+                        ),
+                      );
+                    }
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Save"),
+                ),
+              ],
+            );
+          },
         );
       },
     );
