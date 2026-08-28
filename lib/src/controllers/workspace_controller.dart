@@ -49,6 +49,21 @@ class WorkspaceController extends ChangeNotifier {
     await loadWorkspace();
   }
 
+  Future<int> importPDFNotebook(String name, String pdfPath, int totalPages) async {
+    final notebookId = await DBHelper.insertNotebook(name, _activeFolder?.id);
+    for (int i = 0; i < totalPages; i++) {
+      await DBHelper.insertPage(
+        notebookId, 
+        i, 
+        'blank',
+        pdfPath: pdfPath,
+        pdfPageIndex: i + 1,
+      );
+    }
+    await loadWorkspace();
+    return notebookId;
+  }
+
   Future<void> deleteNotebook(int notebookId) async {
     await DBHelper.deleteNotebook(notebookId);
     await loadWorkspace();

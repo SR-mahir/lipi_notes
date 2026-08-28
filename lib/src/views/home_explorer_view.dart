@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:pdfx/pdfx.dart';
 import '../controllers/workspace_controller.dart';
 import '../models/workspace_models.dart';
+import '../models/db_helper.dart';
 import 'notebook_editor_view.dart';
 
 class HomeExplorerView extends StatefulWidget {
@@ -138,6 +141,65 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
         );
       },
     );
+  }
+
+  Future<void> _importPDFNotebookFlow() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      if (result == null || result.files.single.path == null) return;
+      
+      final path = result.files.single.path!;
+      final name = result.files.single.name.replaceAll('.pdf', '');
+
+      // Open PDF document using pdfx to retrieve number of pages
+      final document = await PdfDocument.openFile(path);
+      final totalPages = document.pagesCount;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(color: Colors.green),
+                SizedBox(width: 20),
+                Text("Importing and parsing PDF..."),
+              ],
+            ),
+          );
+        },
+      );
+
+      final notebookId = await _workspaceController.importPDFNotebook(name, path, totalPages);
+      
+      if (mounted) {
+        Navigator.pop(context); // Dismiss loading dialog
+      }
+
+      final allNotebooks = await DBHelper.getAllNotebooks();
+      final notebookMap = allNotebooks.firstWhere((row) => row['id'] == notebookId);
+      final notebook = Notebook.fromMap(notebookMap);
+
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => NotebookEditorView(notebook: notebook),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Failed to import PDF: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to import PDF: $e")),
+        );
+      }
+    }
   }
 
   @override
@@ -283,6 +345,15 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
                 ),
                 const SizedBox(height: 12),
               ],
+              FloatingActionButton.small(
+                heroTag: "import_pdf",
+                onPressed: _importPDFNotebookFlow,
+                backgroundColor: Colors.green.shade100,
+                foregroundColor: Colors.green.shade900,
+                tooltip: "Import PDF Notebook",
+                child: const Icon(Icons.picture_as_pdf),
+              ),
+              const SizedBox(height: 12),
               FloatingActionButton(
                 heroTag: "add_notebook",
                 onPressed: _showCreateNotebookDialog,

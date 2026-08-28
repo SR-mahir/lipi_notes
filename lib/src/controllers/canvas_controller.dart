@@ -19,6 +19,7 @@ class CanvasController extends ChangeNotifier {
   CanvasTemplate _activeTemplate = CanvasTemplate.blank;
   bool _isDarkMode = false;
   List<TextBoxModel> _textBoxes = [];
+  List<Map<String, dynamic>> _clipAssets = [];
 
   // Lasso and selection properties
   final List<Offset> _lassoPath = [];
@@ -35,6 +36,8 @@ class CanvasController extends ChangeNotifier {
   List<NotebookPage> get pages => _pages;
   int get currentPageIndex => _currentPageIndex;
   NotebookPage? get currentPage => _pages.isNotEmpty ? _pages[_currentPageIndex] : null;
+  String? get currentPdfPath => currentPage?.pdfPath;
+  int? get currentPdfPageIndex => currentPage?.pdfPageIndex;
 
   List<DrawingStroke> get history => _history;
   CanvasTool get activeTool => _activeTool;
@@ -42,6 +45,7 @@ class CanvasController extends ChangeNotifier {
   CanvasTemplate get activeTemplate => _activeTemplate;
   bool get isDarkMode => _isDarkMode;
   List<TextBoxModel> get textBoxes => _textBoxes;
+  List<Map<String, dynamic>> get clipAssets => _clipAssets;
   List<Offset> get lassoPath => _lassoPath;
   List<DrawingStroke> get selectedStrokes => _selectedStrokes;
   Rect? get selectionBounds => _selectionBounds;
@@ -170,6 +174,7 @@ class CanvasController extends ChangeNotifier {
       }
       notifyListeners();
       await loadTextBoxesFromDB();
+      await loadClipsFromDB();
     } catch (e) {
       debugPrint("Failed to load strokes from database: $e");
     }
@@ -184,6 +189,131 @@ class CanvasController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint("Failed to load text boxes from database: $e");
+    }
+  }
+
+  Future<void> loadClipsFromDB() async {
+    try {
+      _clipAssets = await DBHelper.getClipAssets();
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Failed to load clip assets: $e");
+    }
+  }
+
+  Future<void> saveSelectedAsClip(String name) async {
+    if (_selectedStrokes.isEmpty) return;
+
+    final pathStrings = <String>[];
+    for (var stroke in _selectedStrokes) {
+      final ptsStr = serializePointsStatic(stroke.points.map((p) => p.point).toList());
+      pathStrings.add(ptsStr);
+    }
+
+    final compositePath = pathStrings.join('|');
+    final sampleStroke = _selectedStrokes.first;
+
+    final row = {
+      'name': name,
+      'path_string': compositePath,
+      'color': sampleStroke.color.value,
+      'stroke_width': sampleStroke.strokeWidth,
+      'pen_type': sampleStroke.penType.name,
+    };
+
+    try {
+      await DBHelper.insertClipAsset(row);
+      await loadClipsFromDB();
+    } catch (e) {
+      debugPrint("Failed to save clip: $e");
+    }
+  }
+
+  Future<void> stampClip(Map<String, dynamic> clip, Offset targetCenter) async {
+    if (_pages.isEmpty) return;
+    final pageId = _pages[_currentPageIndex].id!;
+
+    final compositePath = clip['path_string'] as String;
+    final pathSegments = compositePath.split('|');
+
+    final allPoints = <Offset>[];
+    final strokePointsList = <List<StrokePoint>>[];
+
+    for (var pathStr in pathSegments) {
+      final pts = _deserializePoints(pathStr);
+      if (pts.isNotEmpty) {
+        strokePointsList.add(pts);
+        allPoints.addAll(pts.map((p) => p.point));
+      }
+    }
+
+    if (allPoints.isEmpty) return;
+
+    double minX = double.infinity, maxX = -double.infinity;
+    double minY = double.infinity, maxY = -double.infinity;
+    for (var p in allPoints) {
+      if (p.dx < minX) minX = p.dx;
+      if (p.dx > maxX) maxX = p.dx;
+      if (p.dy < minY) minY = p.dy;
+      if (p.dy > maxY) maxY = p.dy;
+    }
+    final centerX = (minX + maxX) / 2;
+    final centerY = (minY + maxY) / 2;
+
+    final dx = targetCenter.dx - centerX;
+    final dy = targetCenter.dy - centerY;
+
+    final penType = PenType.values.firstWhere(
+      (e) => e.name == clip['pen_type'],
+      orElse: () => PenType.fountain,
+    );
+    final color = Color(clip['color'] as int);
+    final strokeWidth = clip['stroke_width'] as double;
+
+    for (var pts in strokePointsList) {
+      final translatedPoints = pts.map((p) {
+        return StrokePoint(
+          point: Offset(p.point.dx + dx, p.point.dy + dy),
+          pressure: p.pressure,
+          timestamp: DateTime.now(),
+        );
+      }).toList();
+
+      final translatedPathStr = serializePointsStatic(translatedPoints.map((p) => p.point).toList());
+
+      try {
+        final strokeId = await DBHelper.insertStroke(
+          translatedPathStr,
+          color.value,
+          strokeWidth,
+          penType.name,
+          pageId,
+        );
+
+        final newStroke = DrawingStroke(
+          id: strokeId,
+          pageId: pageId,
+          points: translatedPoints,
+          color: color,
+          strokeWidth: strokeWidth,
+          penType: penType,
+        );
+
+        _history.add(newStroke);
+      } catch (e) {
+        debugPrint("Failed to insert stamped stroke: $e");
+      }
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> deleteClip(int id) async {
+    try {
+      await DBHelper.deleteClipAsset(id);
+      await loadClipsFromDB();
+    } catch (e) {
+      debugPrint("Failed to delete clip: $e");
     }
   }
 
