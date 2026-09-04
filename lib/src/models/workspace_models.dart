@@ -59,12 +59,16 @@ class NotebookPage {
   final int notebookId;
   final int pageIndex;
   final String backgroundType; // 'blank', 'ruled', 'grid', 'dotted'
+  final String? pdfPath;
+  final int? pdfPageIndex;
 
   NotebookPage({
     this.id,
     required this.notebookId,
     required this.pageIndex,
     this.backgroundType = 'blank',
+    this.pdfPath,
+    this.pdfPageIndex,
   });
 
   Map<String, dynamic> toMap() {
@@ -73,6 +77,8 @@ class NotebookPage {
       'notebook_id': notebookId,
       'page_index': pageIndex,
       'background_type': backgroundType,
+      'pdf_path': pdfPath,
+      'pdf_page_index': pdfPageIndex,
     };
   }
 
@@ -82,6 +88,8 @@ class NotebookPage {
       notebookId: map['notebook_id'] as int,
       pageIndex: map['page_index'] as int,
       backgroundType: map['background_type'] as String? ?? 'blank',
+      pdfPath: map['pdf_path'] as String?,
+      pdfPageIndex: map['pdf_page_index'] as int?,
     );
   }
 }

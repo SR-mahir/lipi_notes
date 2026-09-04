@@ -16,7 +16,7 @@ class DBHelper {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 6,
       onCreate: (db, version) async {
         // Version 3: Create full hierarchical notebook schema
         await db.execute('''
@@ -42,6 +42,8 @@ class DBHelper {
             notebook_id INTEGER NOT NULL,
             page_index INTEGER NOT NULL,
             background_type TEXT NOT NULL DEFAULT 'blank',
+            pdf_path TEXT,
+            pdf_page_index INTEGER,
             FOREIGN KEY (notebook_id) REFERENCES notebooks (id) ON DELETE CASCADE
           )
         ''');
@@ -71,6 +73,18 @@ class DBHelper {
             font_size REAL NOT NULL,
             color INTEGER NOT NULL,
             FOREIGN KEY (page_id) REFERENCES pages (id) ON DELETE CASCADE
+          )
+        ''');
+
+        // Version 5: Create clip_assets table
+        await db.execute('''
+          CREATE TABLE clip_assets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            path_string TEXT NOT NULL,
+            color INTEGER NOT NULL,
+            stroke_width REAL NOT NULL,
+            pen_type TEXT NOT NULL DEFAULT 'fountain'
           )
         ''');
       },
@@ -130,6 +144,22 @@ class DBHelper {
               FOREIGN KEY (page_id) REFERENCES pages (id) ON DELETE CASCADE
             )
           ''');
+        }
+        if (oldVersion < 5) {
+          await db.execute('''
+            CREATE TABLE clip_assets (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              path_string TEXT NOT NULL,
+              color INTEGER NOT NULL,
+              stroke_width REAL NOT NULL,
+              pen_type TEXT NOT NULL DEFAULT 'fountain'
+            )
+          ''');
+        }
+        if (oldVersion < 6) {
+          await db.execute("ALTER TABLE pages ADD COLUMN pdf_path TEXT");
+          await db.execute("ALTER TABLE pages ADD COLUMN pdf_page_index INTEGER");
         }
       },
     );
@@ -221,12 +251,14 @@ class DBHelper {
   }
 
   // --- PAGES CRUD ---
-  static Future<int> insertPage(int notebookId, int pageIndex, String backgroundType) async {
+  static Future<int> insertPage(int notebookId, int pageIndex, String backgroundType, {String? pdfPath, int? pdfPageIndex}) async {
     final db = await database;
     return await db.insert('pages', {
       'notebook_id': notebookId,
       'page_index': pageIndex,
       'background_type': backgroundType,
+      'pdf_path': pdfPath,
+      'pdf_page_index': pdfPageIndex,
     });
   }
 
@@ -279,5 +311,21 @@ class DBHelper {
   static Future<int> deleteTextBox(int id) async {
     final db = await database;
     return await db.delete('text_boxes', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // --- CLIP ASSETS CRUD ---
+  static Future<int> insertClipAsset(Map<String, dynamic> row) async {
+    final db = await database;
+    return await db.insert('clip_assets', row);
+  }
+
+  static Future<List<Map<String, dynamic>>> getClipAssets() async {
+    final db = await database;
+    return await db.query('clip_assets', orderBy: 'id ASC');
+  }
+
+  static Future<int> deleteClipAsset(int id) async {
+    final db = await database;
+    return await db.delete('clip_assets', where: 'id = ?', whereArgs: [id]);
   }
 }

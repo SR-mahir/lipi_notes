@@ -3,6 +3,7 @@ import '../controllers/canvas_controller.dart';
 import '../models/stroke_model.dart';
 import '../models/text_box_model.dart';
 import 'stroke_painter.dart';
+import 'pdf_page_background.dart';
 
 class DrawingCanvasView extends StatefulWidget {
   final CanvasController controller;
@@ -119,6 +120,13 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                             child: RepaintBoundary(
                               child: Stack(
                                 children: [
+                                  if (_controller.currentPdfPath != null)
+                                    Positioned.fill(
+                                      child: PdfPageBackground(
+                                        pdfPath: _controller.currentPdfPath!,
+                                        pageNumber: _controller.currentPdfPageIndex ?? 1,
+                                      ),
+                                    ),
                                   CustomPaint(
                                     painter: StrokePainter(
                                       history: _controller.history,
@@ -244,6 +252,13 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                             });
                           },
                           tooltip: "Canvas Templates",
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.auto_awesome_motion_rounded),
+                          color: Colors.grey,
+                          onPressed: () => _showClipDrawerBottomSheet(context),
+                          tooltip: "Clip Drawer",
                         ),
                         const SizedBox(width: 12),
                         Container(width: 1, height: 24, color: Colors.grey.shade300),
@@ -384,6 +399,21 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                 ],
               ),
             ),
+            if (_controller.selectedStrokes.isNotEmpty)
+              Positioned(
+                bottom: 20,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: FloatingActionButton.extended(
+                    onPressed: () => _showSaveClipDialog(context),
+                    label: const Text("Save Selection as Clip"),
+                    icon: const Icon(Icons.save_alt_rounded),
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
           ],
         );
       },
@@ -533,6 +563,181 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                   child: const Text("Save"),
                 ),
               ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showSaveClipDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Save Selection as Clip"),
+          content: TextField(
+            controller: nameController,
+            decoration: const InputDecoration(
+              hintText: "Enter asset name (e.g., Star)",
+              border: OutlineInputBorder(),
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isNotEmpty) {
+                  widget.controller.saveSelectedAsClip(name);
+                }
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text("Saved '$name' to Clip Drawer"),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              child: const Text("Save"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showClipDrawerBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return ListenableBuilder(
+          listenable: widget.controller,
+          builder: (context, _) {
+            final clips = widget.controller.clipAssets;
+
+            return Container(
+              height: 350,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "User Asset Clip Drawer",
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  Expanded(
+                    child: clips.isEmpty
+                        ? const Center(
+                            child: Text(
+                              "No saved clips yet.\nUse Lasso Tool to select any drawing and save it!",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : GridView.builder(
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: 1.1,
+                            ),
+                            itemCount: clips.length,
+                            itemBuilder: (context, idx) {
+                              final clip = clips[idx];
+                              return Card(
+                                elevation: 1.5,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: InkWell(
+                                  onTap: () {
+                                    final size = MediaQuery.of(context).size;
+                                    widget.controller.stampClip(
+                                      clip, 
+                                      Offset(size.width / 2, size.height / 2),
+                                    );
+                                    Navigator.pop(context);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text("Stamped '${clip['name']}' in center of canvas"),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Stack(
+                                    children: [
+                                      Positioned.fill(
+                                        child: Center(
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                Icons.auto_awesome_mosaic_rounded,
+                                                color: Colors.green.shade600,
+                                                size: 28,
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                clip['name'] as String,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 2,
+                                        right: 2,
+                                        child: SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: IconButton(
+                                            padding: EdgeInsets.zero,
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                              color: Colors.redAccent,
+                                              size: 16,
+                                            ),
+                                            onPressed: () {
+                                              widget.controller.deleteClip(clip['id'] as int);
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
             );
           },
         );
