@@ -87,6 +87,17 @@ class StrokePainter extends CustomPainter {
         canvas.drawCircle(corner, 6.0, handlePaint);
         canvas.drawCircle(corner, 6.0, handleBorderPaint);
       }
+
+      // Draw top rotation handle with stem
+      final stemBottom = Offset(selectionBounds!.center.dx, selectionBounds!.top);
+      final stemTop = Offset(selectionBounds!.center.dx, selectionBounds!.top - 25);
+      canvas.drawLine(stemBottom, stemTop, boxPaint);
+
+      final rotatePaint = Paint()
+        ..color = Colors.green
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(stemTop, 7.0, rotatePaint);
+      canvas.drawCircle(stemTop, 7.0, handleBorderPaint);
     }
   }
 
@@ -112,8 +123,8 @@ class StrokePainter extends CustomPainter {
       ..isAntiAlias = true;
 
     if (stroke.penType == PenType.highlighter) {
-      paint.color = paintColor.withOpacity(0.35);
-      paint.strokeWidth = stroke.strokeWidth * 3.5;
+      _drawHighlighterStroke(canvas, stroke, paintColor);
+      return;
     } else if (stroke.penType == PenType.brush) {
       paint.maskFilter = MaskFilter.blur(BlurStyle.normal, stroke.strokeWidth * 0.18);
     }
@@ -182,6 +193,48 @@ class StrokePainter extends CustomPainter {
     
     paint.strokeWidth = prevWidth;
     canvas.drawLine(start, pLast.point, paint);
+  }
+
+  void _drawHighlighterStroke(Canvas canvas, DrawingStroke stroke, Color paintColor) {
+    if (stroke.points.isEmpty) return;
+
+    Color hlColor = paintColor;
+    if (hlColor == Colors.black || hlColor == const Color(0xFF000000) || hlColor == Colors.white) {
+      hlColor = const Color(0xFFFFD54F); // Vibrant classic highlighter amber-yellow
+    }
+
+    final paint = Paint()
+      ..color = hlColor.withValues(alpha: 0.38)
+      ..strokeWidth = stroke.strokeWidth * 3.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true;
+
+    if (stroke.points.length == 1) {
+      canvas.drawCircle(stroke.points.first.point, paint.strokeWidth / 2, paint..style = PaintingStyle.fill);
+      return;
+    }
+
+    if (stroke.points.length == 2) {
+      canvas.drawLine(stroke.points[0].point, stroke.points[1].point, paint);
+      return;
+    }
+
+    // Build a single continuous smoothed Bézier path
+    // Calling canvas.drawPath ONCE ensures zero self-overlapping alpha blending banding!
+    final path = Path();
+    path.moveTo(stroke.points[0].point.dx, stroke.points[0].point.dy);
+
+    for (int i = 1; i < stroke.points.length - 1; i++) {
+      final pCurr = stroke.points[i].point;
+      final pNext = stroke.points[i + 1].point;
+      final mid = Offset((pCurr.dx + pNext.dx) / 2, (pCurr.dy + pNext.dy) / 2);
+      path.quadraticBezierTo(pCurr.dx, pCurr.dy, mid.dx, mid.dy);
+    }
+
+    path.lineTo(stroke.points.last.point.dx, stroke.points.last.point.dy);
+    canvas.drawPath(path, paint);
   }
 
   double _getPointWidth(DrawingStroke stroke, StrokePoint p, double baseWidth) {

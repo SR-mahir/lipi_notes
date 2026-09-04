@@ -6,6 +6,9 @@ import '../models/stroke_model.dart';
 import '../models/workspace_models.dart';
 import '../models/text_box_model.dart';
 import '../models/db_helper.dart';
+import 'pdf_export_controller.dart';
+
+enum LassoHandle { none, move, topLeft, topRight, bottomLeft, bottomRight, rotate }
 
 class CanvasController extends ChangeNotifier {
   final Notebook notebook;
@@ -27,6 +30,7 @@ class CanvasController extends ChangeNotifier {
   Rect? _selectionBounds;
   bool _isDraggingSelection = false;
   Offset? _lastDragPoint;
+  LassoHandle _activeHandle = LassoHandle.none;
   
   // Auto-save queue and timer for non-blocking database writes
   final List<DrawingStroke> _unsavedStrokes = [];
@@ -49,11 +53,12 @@ class CanvasController extends ChangeNotifier {
   List<Offset> get lassoPath => _lassoPath;
   List<DrawingStroke> get selectedStrokes => _selectedStrokes;
   Rect? get selectionBounds => _selectionBounds;
+  LassoHandle get activeHandle => _activeHandle;
 
   DrawingStroke? get currentStroke => _currentPoints.isNotEmpty && _pages.isNotEmpty
       ? DrawingStroke(
           points: _currentPoints,
-          color: Colors.black,
+          color: _activePenType == PenType.highlighter ? const Color(0xFFFFD54F) : Colors.black,
           strokeWidth: 4.0,
           penType: _activePenType,
           pageId: _pages[_currentPageIndex].id,
@@ -61,6 +66,7 @@ class CanvasController extends ChangeNotifier {
       : null;
 
   CanvasController({required this.notebook}) {
+    _isDarkMode = notebook.isDarkMode;
     _loadPagesAndStrokes();
     _startAutoSaveTimer();
   }
@@ -130,6 +136,9 @@ class CanvasController extends ChangeNotifier {
   void toggleDarkMode() {
     _isDarkMode = !_isDarkMode;
     notifyListeners();
+    if (notebook.id != null) {
+      DBHelper.updateNotebookDarkMode(notebook.id!, _isDarkMode);
+    }
   }
 
   void _startAutoSaveTimer() {
@@ -139,8 +148,8 @@ class CanvasController extends ChangeNotifier {
   }
 
   // --- SERIALIZATION TASK RUN ON BACKGROUND ISOLATE ---
-  static String serializePointsStatic(List<Offset> points) {
-    return points.map((p) => '${p.dx.toStringAsFixed(1)},${p.dy.toStringAsFixed(1)}').join(' ');
+  static String serializePointsStatic(List<StrokePoint> points) {
+    return points.map((p) => '${p.point.dx.toStringAsFixed(1)},${p.point.dy.toStringAsFixed(1)},${p.pressure.toStringAsFixed(2)}').join(' ');
   }
 
   // --- DATABASE HOOK ACTIONS ---
@@ -206,7 +215,7 @@ class CanvasController extends ChangeNotifier {
 
     final pathStrings = <String>[];
     for (var stroke in _selectedStrokes) {
-      final ptsStr = serializePointsStatic(stroke.points.map((p) => p.point).toList());
+      final ptsStr = serializePointsStatic(stroke.points);
       pathStrings.add(ptsStr);
     }
 
@@ -279,7 +288,7 @@ class CanvasController extends ChangeNotifier {
         );
       }).toList();
 
-      final translatedPathStr = serializePointsStatic(translatedPoints.map((p) => p.point).toList());
+      final translatedPathStr = serializePointsStatic(translatedPoints);
 
       try {
         final strokeId = await DBHelper.insertStroke(
@@ -317,16 +326,27 @@ class CanvasController extends ChangeNotifier {
     }
   }
 
-  Future<void> addTextBox(String text, Offset position, double fontSize) async {
+  Future<void> addTextBox(
+    String text, 
+    Offset position, 
+    double fontSize, {
+    String fontFamily = 'sans',
+    Color? color,
+  }) async {
     if (_pages.isEmpty) return;
     final pageId = _pages[_currentPageIndex].id!;
+    final colorVal = color != null 
+        ? color.value 
+        : (_isDarkMode ? 0xFFFFFFFF : 0xFF000000);
+
     final newBox = TextBoxModel(
       pageId: pageId,
       text: text,
       x: position.dx,
       y: position.dy,
       fontSize: fontSize,
-      colorValue: _isDarkMode ? 0xFFFFFFFF : 0xFF000000,
+      colorValue: colorVal,
+      fontFamily: fontFamily,
     );
     try {
       final id = await DBHelper.insertTextBox(newBox.toMap());
@@ -373,6 +393,17 @@ class CanvasController extends ChangeNotifier {
     }
   }
 
+  /// Flushes any pending deletions and unsaved strokes immediately to SQLite.
+  Future<void> flushUnsavedStrokes() async {
+    await _performPeriodicSave();
+  }
+
+  /// Exports the current notebook to PDF and shares it.
+  Future<void> exportToPDF({Rect? sharePositionOrigin}) async {
+    await flushUnsavedStrokes();
+    await PDFExportController.exportNotebook(notebook, sharePositionOrigin: sharePositionOrigin);
+  }
+
   Future<void> _performPeriodicSave() async {
     if (_pendingDeletions.isNotEmpty) {
       final deletions = List<int>.from(_pendingDeletions);
@@ -395,10 +426,8 @@ class CanvasController extends ChangeNotifier {
     for (var stroke in strokesToSave) {
       if (!_history.contains(stroke)) continue;
 
-      final pointsData = stroke.points.map((p) => p.point).toList();
-      
       try {
-        final String serializedPath = await compute(serializePointsStatic, pointsData);
+        final String serializedPath = await compute(serializePointsStatic, stroke.points);
         final id = await DBHelper.insertStroke(
           serializedPath, 
           stroke.color.toARGB32(), 
@@ -427,8 +456,7 @@ class CanvasController extends ChangeNotifier {
     if (_unsavedStrokes.isEmpty) return;
     for (var stroke in _unsavedStrokes) {
       if (!_history.contains(stroke)) continue;
-      final pointsData = stroke.points.map((p) => p.point).toList();
-      final String serializedPath = serializePointsStatic(pointsData);
+      final String serializedPath = serializePointsStatic(stroke.points);
       try {
         DBHelper.insertStroke(
           serializedPath, 
@@ -442,19 +470,24 @@ class CanvasController extends ChangeNotifier {
     _unsavedStrokes.clear();
   }
 
-  List<StrokePoint> _deserializePoints(String dataString) {
+  static List<StrokePoint> deserializePointsStatic(String dataString) {
     if (dataString.isEmpty) return [];
     return dataString.split(' ').map((pair) {
       final coordinates = pair.split(',');
       final dx = double.tryParse(coordinates[0]) ?? 0.0;
       final dy = double.tryParse(coordinates[1]) ?? 0.0;
+      final pressure = coordinates.length > 2 
+          ? (double.tryParse(coordinates[2]) ?? 1.0) 
+          : 1.0;
       return StrokePoint(
         point: Offset(dx, dy),
-        pressure: 1.0,
+        pressure: pressure,
         timestamp: DateTime.now(),
       );
     }).toList();
   }
+
+  List<StrokePoint> _deserializePoints(String dataString) => deserializePointsStatic(dataString);
 
   // --- PAGINATION ACTIONS ---
   Future<void> nextPage() async {
@@ -530,6 +563,52 @@ class CanvasController extends ChangeNotifier {
     await loadStrokesFromDB();
   }
 
+  Future<void> duplicateCurrentPage() async {
+    if (_pages.isEmpty) return;
+    finalizeCurrentStroke();
+    await _performPeriodicSave();
+
+    final currentPageId = _pages[_currentPageIndex].id!;
+    await DBHelper.duplicatePage(currentPageId);
+
+    final pageData = await DBHelper.getPagesForNotebook(notebook.id!);
+    _pages = pageData.map((map) => NotebookPage.fromMap(map)).toList();
+
+    _currentPageIndex = (_currentPageIndex + 1).clamp(0, _pages.length - 1);
+    _activeTemplate = _parseBackgroundType(_pages[_currentPageIndex].backgroundType);
+    await loadStrokesFromDB();
+    notifyListeners();
+  }
+
+  Future<void> reorderPages(List<int> orderedPageIds) async {
+    if (_pages.isEmpty) return;
+    finalizeCurrentStroke();
+    await _performPeriodicSave();
+
+    await DBHelper.reorderPages(notebook.id!, orderedPageIds);
+
+    final pageData = await DBHelper.getPagesForNotebook(notebook.id!);
+    _pages = pageData.map((map) => NotebookPage.fromMap(map)).toList();
+
+    if (_currentPageIndex >= _pages.length) {
+      _currentPageIndex = _pages.length - 1;
+    }
+    _activeTemplate = _parseBackgroundType(_pages[_currentPageIndex].backgroundType);
+    await loadStrokesFromDB();
+    notifyListeners();
+  }
+
+  Future<void> goToPage(int index) async {
+    if (index >= 0 && index < _pages.length && index != _currentPageIndex) {
+      finalizeCurrentStroke();
+      await _performPeriodicSave();
+      _currentPageIndex = index;
+      _activeTemplate = _parseBackgroundType(_pages[_currentPageIndex].backgroundType);
+      await loadStrokesFromDB();
+      notifyListeners();
+    }
+  }
+
   // --- TOUCH POINTER HANDLING ACTIONS ---
   void handlePointerDown(PointerEvent event, Offset canvasOffset, Matrix4 transformMatrix) {
     if (_pages.isEmpty) return;
@@ -541,15 +620,55 @@ class CanvasController extends ChangeNotifier {
       _eraseSegmentAt(canvasOffset);
       return;
     } else if (_activeTool == CanvasTool.lasso) {
-      if (_selectionBounds != null && _selectionBounds!.contains(canvasOffset)) {
-        _isDraggingSelection = true;
-        _lastDragPoint = canvasOffset;
-      } else {
-        _selectedStrokes.clear();
-        _selectionBounds = null;
-        _lassoPath.clear();
-        _lassoPath.add(canvasOffset);
+      if (_selectionBounds != null) {
+        final rotateCenter = Offset(_selectionBounds!.center.dx, _selectionBounds!.top - 25);
+        const hitRadius = 22.0;
+
+        if ((canvasOffset - rotateCenter).distance <= hitRadius) {
+          _activeHandle = LassoHandle.rotate;
+          _lastDragPoint = canvasOffset;
+          _isDraggingSelection = true;
+          notifyListeners();
+          return;
+        } else if ((canvasOffset - _selectionBounds!.topLeft).distance <= hitRadius) {
+          _activeHandle = LassoHandle.topLeft;
+          _lastDragPoint = canvasOffset;
+          _isDraggingSelection = true;
+          notifyListeners();
+          return;
+        } else if ((canvasOffset - _selectionBounds!.topRight).distance <= hitRadius) {
+          _activeHandle = LassoHandle.topRight;
+          _lastDragPoint = canvasOffset;
+          _isDraggingSelection = true;
+          notifyListeners();
+          return;
+        } else if ((canvasOffset - _selectionBounds!.bottomLeft).distance <= hitRadius) {
+          _activeHandle = LassoHandle.bottomLeft;
+          _lastDragPoint = canvasOffset;
+          _isDraggingSelection = true;
+          notifyListeners();
+          return;
+        } else if ((canvasOffset - _selectionBounds!.bottomRight).distance <= hitRadius) {
+          _activeHandle = LassoHandle.bottomRight;
+          _lastDragPoint = canvasOffset;
+          _isDraggingSelection = true;
+          notifyListeners();
+          return;
+        } else if (_selectionBounds!.contains(canvasOffset)) {
+          _activeHandle = LassoHandle.move;
+          _lastDragPoint = canvasOffset;
+          _isDraggingSelection = true;
+          notifyListeners();
+          return;
+        }
       }
+
+      _activeHandle = LassoHandle.none;
+      _isDraggingSelection = false;
+      _selectedStrokes.clear();
+      _selectionBounds = null;
+      _lassoPath.clear();
+      _lassoPath.add(canvasOffset);
       notifyListeners();
       return;
     }
@@ -575,10 +694,44 @@ class CanvasController extends ChangeNotifier {
       _eraseSegmentAt(canvasOffset);
       return;
     } else if (_activeTool == CanvasTool.lasso) {
-      if (_isDraggingSelection && _lastDragPoint != null) {
-        final delta = canvasOffset - _lastDragPoint!;
-        _lastDragPoint = canvasOffset;
-        _translateSelectedStrokes(delta);
+      if (_isDraggingSelection && _lastDragPoint != null && _selectionBounds != null) {
+        if (_activeHandle == LassoHandle.move) {
+          final delta = canvasOffset - _lastDragPoint!;
+          _lastDragPoint = canvasOffset;
+          _translateSelectedStrokes(delta);
+        } else if (_activeHandle == LassoHandle.rotate) {
+          final center = _selectionBounds!.center;
+          final prevAngle = math.atan2(_lastDragPoint!.dy - center.dy, _lastDragPoint!.dx - center.dx);
+          final currAngle = math.atan2(canvasOffset.dy - center.dy, canvasOffset.dx - center.dx);
+          final deltaAngle = currAngle - prevAngle;
+          _lastDragPoint = canvasOffset;
+          _rotateSelectedStrokes(deltaAngle, center);
+        } else if (_activeHandle != LassoHandle.none) {
+          Offset anchor;
+          switch (_activeHandle) {
+            case LassoHandle.topLeft:
+              anchor = _selectionBounds!.bottomRight;
+              break;
+            case LassoHandle.topRight:
+              anchor = _selectionBounds!.bottomLeft;
+              break;
+            case LassoHandle.bottomLeft:
+              anchor = _selectionBounds!.topRight;
+              break;
+            case LassoHandle.bottomRight:
+            default:
+              anchor = _selectionBounds!.topLeft;
+              break;
+          }
+
+          final oldDist = (_lastDragPoint! - anchor).distance;
+          final newDist = (canvasOffset - anchor).distance;
+          if (oldDist > 5 && newDist > 5) {
+            final scale = (newDist / oldDist).clamp(0.5, 2.0);
+            _lastDragPoint = canvasOffset;
+            _scaleSelectedStrokes(scale, anchor);
+          }
+        }
       } else {
         _lassoPath.add(canvasOffset);
         notifyListeners();
@@ -605,6 +758,7 @@ class CanvasController extends ChangeNotifier {
     if (_activeTool == CanvasTool.lasso) {
       if (_isDraggingSelection) {
         _isDraggingSelection = false;
+        _activeHandle = LassoHandle.none;
         _lastDragPoint = null;
       } else {
         if (_lassoPath.length >= 3) {
@@ -641,7 +795,7 @@ class CanvasController extends ChangeNotifier {
 
       final newStroke = DrawingStroke(
         points: List.from(_currentPoints),
-        color: Colors.black,
+        color: _activePenType == PenType.highlighter ? const Color(0xFFFFD54F) : Colors.black,
         strokeWidth: 4.0,
         penType: _activePenType,
         pageId: _pages[_currentPageIndex].id,
@@ -723,7 +877,7 @@ class CanvasController extends ChangeNotifier {
         }
 
         for (var list in splitStrokes) {
-          if (list.length >= 1) {
+          if (list.isNotEmpty) {
             final newSub = DrawingStroke(
               points: list,
               color: stroke.color,
@@ -798,6 +952,97 @@ class CanvasController extends ChangeNotifier {
         points: shiftedPoints,
         color: s.color,
         strokeWidth: s.strokeWidth,
+        penType: s.penType,
+        pageId: s.pageId,
+      );
+
+      if (s.id != null) {
+        _pendingDeletions.add(s.id!);
+      } else {
+        _unsavedStrokes.remove(s);
+      }
+
+      final index = _history.indexOf(s);
+      if (index != -1) {
+        _history[index] = updated;
+      }
+      _unsavedStrokes.add(updated);
+      updatedStrokes.add(updated);
+    }
+
+    _selectedStrokes.clear();
+    _selectedStrokes.addAll(updatedStrokes);
+    _recalculateSelectionBounds();
+  }
+
+  void _rotateSelectedStrokes(double angle, Offset center) {
+    if (_selectedStrokes.isEmpty || angle == 0) return;
+    final cosA = math.cos(angle);
+    final sinA = math.sin(angle);
+    final List<DrawingStroke> updatedStrokes = [];
+
+    for (var s in _selectedStrokes) {
+      final rotatedPoints = s.points.map((sp) {
+        final rel = sp.point - center;
+        final rotatedOffset = Offset(
+          center.dx + (rel.dx * cosA - rel.dy * sinA),
+          center.dy + (rel.dx * sinA + rel.dy * cosA),
+        );
+        return StrokePoint(
+          point: rotatedOffset,
+          pressure: sp.pressure,
+          timestamp: sp.timestamp,
+        );
+      }).toList();
+
+      final updated = DrawingStroke(
+        points: rotatedPoints,
+        color: s.color,
+        strokeWidth: s.strokeWidth,
+        penType: s.penType,
+        pageId: s.pageId,
+      );
+
+      if (s.id != null) {
+        _pendingDeletions.add(s.id!);
+      } else {
+        _unsavedStrokes.remove(s);
+      }
+
+      final index = _history.indexOf(s);
+      if (index != -1) {
+        _history[index] = updated;
+      }
+      _unsavedStrokes.add(updated);
+      updatedStrokes.add(updated);
+    }
+
+    _selectedStrokes.clear();
+    _selectedStrokes.addAll(updatedStrokes);
+    _recalculateSelectionBounds();
+  }
+
+  void _scaleSelectedStrokes(double scale, Offset anchor) {
+    if (_selectedStrokes.isEmpty || scale == 1.0) return;
+    final List<DrawingStroke> updatedStrokes = [];
+
+    for (var s in _selectedStrokes) {
+      final scaledPoints = s.points.map((sp) {
+        final scaledOffset = Offset(
+          anchor.dx + (sp.point.dx - anchor.dx) * scale,
+          anchor.dy + (sp.point.dy - anchor.dy) * scale,
+        );
+        return StrokePoint(
+          point: scaledOffset,
+          pressure: sp.pressure,
+          timestamp: sp.timestamp,
+        );
+      }).toList();
+
+      final updated = DrawingStroke(
+        points: scaledPoints,
+        color: s.color,
+        strokeWidth: (s.strokeWidth * scale).clamp(1.0, 50.0),
         penType: s.penType,
         pageId: s.pageId,
       );

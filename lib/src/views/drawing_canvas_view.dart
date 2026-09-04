@@ -166,6 +166,8 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                                               fontSize: tb.fontSize,
                                               color: Color(tb.colorValue),
                                               fontWeight: FontWeight.w500,
+                                              fontFamily: _getFontFamilyName(tb.fontFamily),
+                                              fontStyle: tb.fontFamily == 'cursive' ? FontStyle.italic : FontStyle.normal,
                                             ),
                                           ),
                                         ),
@@ -420,9 +422,43 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
     );
   }
 
+  static const List<Map<String, String>> _availableFonts = [
+    {'id': 'sans', 'label': 'Sans'},
+    {'id': 'serif', 'label': 'Serif'},
+    {'id': 'monospace', 'label': 'Mono'},
+    {'id': 'cursive', 'label': 'Script'},
+  ];
+
+  static const List<int> _textColors = [
+    0xFF000000, // Black
+    0xFF374151, // Charcoal
+    0xFF1D4ED8, // Blue
+    0xFF15803D, // Green
+    0xFFB91C1C, // Red
+    0xFFD97706, // Orange
+    0xFF7E22CE, // Purple
+    0xFFFFFFFF, // White
+  ];
+
+  String? _getFontFamilyName(String key) {
+    switch (key) {
+      case 'serif':
+        return 'serif';
+      case 'monospace':
+        return 'monospace';
+      case 'cursive':
+        return 'cursive';
+      case 'sans':
+      default:
+        return null;
+    }
+  }
+
   void _showAddTextBoxDialog(BuildContext context, Offset position) {
     final textController = TextEditingController();
     double fontSize = 18.0;
+    String selectedFont = 'sans';
+    int selectedColor = widget.controller.isDarkMode ? 0xFFFFFFFF : 0xFF000000;
 
     showDialog(
       context: context,
@@ -431,40 +467,98 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
           builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text("Create Text Box"),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: textController,
-                    decoration: const InputDecoration(
-                      hintText: "Enter your text...",
-                      border: OutlineInputBorder(),
-                    ),
-                    autofocus: true,
-                    maxLines: null,
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Text("Font Size:"),
-                      Expanded(
-                        child: Slider(
-                          min: 12,
-                          max: 64,
-                          divisions: 13,
-                          value: fontSize,
-                          label: "${fontSize.round()}px",
-                          onChanged: (val) {
-                            setDialogState(() {
-                              fontSize = val;
-                            });
-                          },
-                        ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: textController,
+                      decoration: const InputDecoration(
+                        hintText: "Enter your text...",
+                        border: OutlineInputBorder(),
                       ),
-                      Text("${fontSize.round()}px"),
-                    ],
-                  ),
-                ],
+                      autofocus: true,
+                      maxLines: null,
+                    ),
+                    const SizedBox(height: 14),
+                    const Text("Font Style:", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      children: _availableFonts.map((f) {
+                        final isSelected = selectedFont == f['id'];
+                        return ChoiceChip(
+                          label: Text(
+                            f['label']!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontFamily: _getFontFamilyName(f['id']!),
+                              fontStyle: f['id'] == 'cursive' ? FontStyle.italic : FontStyle.normal,
+                            ),
+                          ),
+                          selected: isSelected,
+                          onSelected: (val) {
+                            if (val) setDialogState(() => selectedFont = f['id']!);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        const Text("Font Size:", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                        Expanded(
+                          child: Slider(
+                            min: 12,
+                            max: 64,
+                            divisions: 13,
+                            value: fontSize,
+                            label: "${fontSize.round()}px",
+                            onChanged: (val) {
+                              setDialogState(() {
+                                fontSize = val;
+                              });
+                            },
+                          ),
+                        ),
+                        Text("${fontSize.round()}px"),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    const Text("Text Color:", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _textColors.map((colorVal) {
+                        final isSelected = selectedColor == colorVal;
+                        return GestureDetector(
+                          onTap: () => setDialogState(() => selectedColor = colorVal),
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: Color(colorVal),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isSelected ? Colors.green : Colors.grey.shade400,
+                                width: isSelected ? 3.0 : 1.0,
+                              ),
+                            ),
+                            child: isSelected
+                                ? Icon(
+                                    Icons.check,
+                                    size: 16,
+                                    color: colorVal == 0xFFFFFFFF ? Colors.black : Colors.white,
+                                  )
+                                : null,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -475,7 +569,13 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                   onPressed: () {
                     final text = textController.text.trim();
                     if (text.isNotEmpty) {
-                      widget.controller.addTextBox(text, position, fontSize);
+                      widget.controller.addTextBox(
+                        text,
+                        position,
+                        fontSize,
+                        fontFamily: selectedFont,
+                        color: Color(selectedColor),
+                      );
                     }
                     Navigator.pop(context);
                   },
@@ -492,6 +592,8 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
   void _showEditTextBoxDialog(BuildContext context, TextBoxModel textBox) {
     final textController = TextEditingController(text: textBox.text);
     double fontSize = textBox.fontSize;
+    String selectedFont = textBox.fontFamily;
+    int selectedColor = textBox.colorValue;
 
     showDialog(
       context: context,
@@ -500,38 +602,96 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
           builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text("Edit Text Box"),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: textController,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: null,
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Text("Font Size:"),
-                      Expanded(
-                        child: Slider(
-                          min: 12,
-                          max: 64,
-                          divisions: 13,
-                          value: fontSize,
-                          label: "${fontSize.round()}px",
-                          onChanged: (val) {
-                            setDialogState(() {
-                              fontSize = val;
-                            });
-                          },
-                        ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: textController,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
                       ),
-                      Text("${fontSize.round()}px"),
-                    ],
-                  ),
-                ],
+                      maxLines: null,
+                    ),
+                    const SizedBox(height: 14),
+                    const Text("Font Style:", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      children: _availableFonts.map((f) {
+                        final isSelected = selectedFont == f['id'];
+                        return ChoiceChip(
+                          label: Text(
+                            f['label']!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontFamily: _getFontFamilyName(f['id']!),
+                              fontStyle: f['id'] == 'cursive' ? FontStyle.italic : FontStyle.normal,
+                            ),
+                          ),
+                          selected: isSelected,
+                          onSelected: (val) {
+                            if (val) setDialogState(() => selectedFont = f['id']!);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        const Text("Font Size:", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                        Expanded(
+                          child: Slider(
+                            min: 12,
+                            max: 64,
+                            divisions: 13,
+                            value: fontSize,
+                            label: "${fontSize.round()}px",
+                            onChanged: (val) {
+                              setDialogState(() {
+                                fontSize = val;
+                              });
+                            },
+                          ),
+                        ),
+                        Text("${fontSize.round()}px"),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    const Text("Text Color:", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _textColors.map((colorVal) {
+                        final isSelected = selectedColor == colorVal;
+                        return GestureDetector(
+                          onTap: () => setDialogState(() => selectedColor = colorVal),
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: Color(colorVal),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isSelected ? Colors.green : Colors.grey.shade400,
+                                width: isSelected ? 3.0 : 1.0,
+                              ),
+                            ),
+                            child: isSelected
+                                ? Icon(
+                                    Icons.check,
+                                    size: 16,
+                                    color: colorVal == 0xFFFFFFFF ? Colors.black : Colors.white,
+                                  )
+                                : null,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -555,6 +715,8 @@ class _DrawingCanvasViewState extends State<DrawingCanvasView> {
                         textBox.copyWith(
                           text: text,
                           fontSize: fontSize,
+                          fontFamily: selectedFont,
+                          colorValue: selectedColor,
                         ),
                       );
                     }

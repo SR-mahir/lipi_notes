@@ -8,6 +8,7 @@ class TextBoxModel {
   final double height;
   final double fontSize;
   final int colorValue;
+  final String fontFamily;
 
   TextBoxModel({
     this.id,
@@ -19,6 +20,7 @@ class TextBoxModel {
     this.height = 80,
     this.fontSize = 16,
     this.colorValue = 0xFF000000, // Black color default
+    this.fontFamily = 'sans',
   });
 
   TextBoxModel copyWith({
@@ -31,6 +33,7 @@ class TextBoxModel {
     double? height,
     double? fontSize,
     int? colorValue,
+    String? fontFamily,
   }) {
     return TextBoxModel(
       id: id ?? this.id,
@@ -42,6 +45,7 @@ class TextBoxModel {
       height: height ?? this.height,
       fontSize: fontSize ?? this.fontSize,
       colorValue: colorValue ?? this.colorValue,
+      fontFamily: fontFamily ?? this.fontFamily,
     );
   }
 
@@ -56,6 +60,7 @@ class TextBoxModel {
       'height': height,
       'font_size': fontSize,
       'color': colorValue,
+      'font_family': fontFamily,
     };
   }
 
@@ -70,6 +75,7 @@ class TextBoxModel {
       height: map['height'] as double? ?? 80,
       fontSize: map['font_size'] as double? ?? 16,
       colorValue: map['color'] as int? ?? 0xFF000000,
+      fontFamily: map['font_family'] as String? ?? 'sans',
     );
   }
 }

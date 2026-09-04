@@ -6,10 +6,12 @@ class WorkspaceController extends ChangeNotifier {
   List<Folder> _folders = [];
   List<Notebook> _notebooks = [];
   Folder? _activeFolder;
+  final List<Folder> _breadcrumbs = [];
 
   List<Folder> get folders => _folders;
   List<Notebook> get notebooks => _notebooks;
   Folder? get activeFolder => _activeFolder;
+  List<Folder> get breadcrumbs => List.unmodifiable(_breadcrumbs);
 
   WorkspaceController() {
     loadWorkspace();
@@ -17,7 +19,7 @@ class WorkspaceController extends ChangeNotifier {
 
   Future<void> loadWorkspace() async {
     try {
-      final folderData = await DBHelper.getFolders();
+      final folderData = await DBHelper.getFolders(parentId: _activeFolder?.id);
       _folders = folderData.map((map) => Folder.fromMap(map)).toList();
 
       final notebookData = await DBHelper.getNotebooks(_activeFolder?.id);
@@ -30,16 +32,18 @@ class WorkspaceController extends ChangeNotifier {
   }
 
   Future<void> createFolder(String name, int colorValue) async {
-    await DBHelper.insertFolder(name, colorValue);
+    await DBHelper.insertFolder(name, colorValue, parentId: _activeFolder?.id);
     await loadWorkspace();
   }
 
   Future<void> deleteFolder(int folderId) async {
     await DBHelper.deleteFolder(folderId);
     if (_activeFolder?.id == folderId) {
-      _activeFolder = null;
+      navigateUp();
+    } else {
+      _breadcrumbs.removeWhere((f) => f.id == folderId);
+      await loadWorkspace();
     }
-    await loadWorkspace();
   }
 
   Future<void> createNotebook(String name) async {
@@ -70,7 +74,40 @@ class WorkspaceController extends ChangeNotifier {
   }
 
   void navigateToFolder(Folder? folder) {
-    _activeFolder = folder;
+    if (folder == null) {
+      _breadcrumbs.clear();
+      _activeFolder = null;
+    } else {
+      final existingIndex = _breadcrumbs.indexWhere((f) => f.id == folder.id);
+      if (existingIndex >= 0) {
+        _breadcrumbs.removeRange(existingIndex + 1, _breadcrumbs.length);
+      } else {
+        _breadcrumbs.add(folder);
+      }
+      _activeFolder = folder;
+    }
     loadWorkspace();
+  }
+
+  void navigateUp() {
+    if (_breadcrumbs.isNotEmpty) {
+      _breadcrumbs.removeLast();
+      _activeFolder = _breadcrumbs.isNotEmpty ? _breadcrumbs.last : null;
+      loadWorkspace();
+    }
+  }
+
+  void navigateToBreadcrumb(int index) {
+    if (index < 0) {
+      navigateToFolder(null);
+    } else if (index < _breadcrumbs.length) {
+      _breadcrumbs.removeRange(index + 1, _breadcrumbs.length);
+      _activeFolder = _breadcrumbs.last;
+      loadWorkspace();
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> searchDeep(String query) async {
+    return await DBHelper.searchNotes(query);
   }
 }

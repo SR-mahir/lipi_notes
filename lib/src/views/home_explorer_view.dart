@@ -3,7 +3,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
 import '../controllers/workspace_controller.dart';
 import '../models/workspace_models.dart';
-import '../models/db_helper.dart';
 import 'notebook_editor_view.dart';
 
 class HomeExplorerView extends StatefulWidget {
@@ -18,6 +17,7 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
   bool _isSearching = false;
   String _searchQuery = "";
   final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _deepSearchResults = [];
 
   @override
   void initState() {
@@ -30,6 +30,35 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
     _workspaceController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String val) async {
+    setState(() {
+      _searchQuery = val;
+    });
+    if (val.trim().isNotEmpty) {
+      final results = await _workspaceController.searchDeep(val);
+      if (mounted) {
+        setState(() {
+          _deepSearchResults = results;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _deepSearchResults = [];
+        });
+      }
+    }
+  }
+
+  void _clearSearch() {
+    setState(() {
+      _isSearching = false;
+      _searchQuery = "";
+      _searchController.clear();
+      _deepSearchResults = [];
+    });
   }
 
   // --- SHOW CREATE FOLDER DIALOG ---
@@ -50,36 +79,41 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text("New Folder"),
+              title: Text(_workspaceController.activeFolder != null ? "Create Sub-Folder" : "Create Folder"),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
                     controller: nameController,
-                    decoration: const InputDecoration(labelText: "Folder Name"),
+                    decoration: InputDecoration(
+                      hintText: _workspaceController.activeFolder != null ? "Sub-folder name" : "Folder name",
+                      border: const OutlineInputBorder(),
+                    ),
                     autofocus: true,
                   ),
                   const SizedBox(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: colors.map((c) {
-                      final isSelected = selectedColor == c;
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: colors.map((colorValue) {
+                      final isSelected = selectedColor == colorValue;
                       return GestureDetector(
-                        onTap: () => setDialogState(() => selectedColor = c),
+                        onTap: () {
+                          setDialogState(() {
+                            selectedColor = colorValue;
+                          });
+                        },
                         child: Container(
-                          width: 32,
-                          height: 32,
+                          width: 36,
+                          height: 36,
                           decoration: BoxDecoration(
-                            color: Color(c),
+                            color: Color(colorValue),
                             shape: BoxShape.circle,
-                            border: isSelected
-                                ? Border.all(color: Colors.black, width: 2.5)
-                                : null,
+                            border: isSelected ? Border.all(color: Colors.black87, width: 3) : null,
                           ),
                         ),
                       );
                     }).toList(),
-                  )
+                  ),
                 ],
               ),
               actions: [
@@ -89,13 +123,11 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    if (nameController.text.trim().isNotEmpty) {
-                      _workspaceController.createFolder(
-                        nameController.text.trim(),
-                        selectedColor,
-                      );
-                      Navigator.pop(context);
+                    final name = nameController.text.trim();
+                    if (name.isNotEmpty) {
+                      _workspaceController.createFolder(name, selectedColor);
                     }
+                    Navigator.pop(context);
                   },
                   child: const Text("Create"),
                 ),
@@ -115,10 +147,13 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text("New Notebook"),
+          title: const Text("Create Notebook"),
           content: TextField(
             controller: nameController,
-            decoration: const InputDecoration(labelText: "Notebook Name"),
+            decoration: const InputDecoration(
+              hintText: "Notebook name",
+              border: OutlineInputBorder(),
+            ),
             autofocus: true,
           ),
           actions: [
@@ -128,12 +163,11 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
             ),
             ElevatedButton(
               onPressed: () {
-                if (nameController.text.trim().isNotEmpty) {
-                  _workspaceController.createNotebook(
-                    nameController.text.trim(),
-                  );
-                  Navigator.pop(context);
+                final name = nameController.text.trim();
+                if (name.isNotEmpty) {
+                  _workspaceController.createNotebook(name);
                 }
+                Navigator.pop(context);
               },
               child: const Text("Create"),
             ),
@@ -143,6 +177,7 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
     );
   }
 
+  // --- IMPORT PDF FLOW ---
   Future<void> _importPDFNotebookFlow() async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -158,6 +193,7 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
       final document = await PdfDocument.openFile(path);
       final totalPages = document.pagesCount;
 
+      if (!mounted) return;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -178,25 +214,23 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
       
       if (mounted) {
         Navigator.pop(context); // Dismiss loading dialog
-      }
+        final importedNotebook = Notebook(
+          id: notebookId,
+          name: name,
+          folderId: _workspaceController.activeFolder?.id,
+        );
 
-      final allNotebooks = await DBHelper.getAllNotebooks();
-      final notebookMap = allNotebooks.firstWhere((row) => row['id'] == notebookId);
-      final notebook = Notebook.fromMap(notebookMap);
-
-      if (mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => NotebookEditorView(notebook: notebook),
+            builder: (context) => NotebookEditorView(notebook: importedNotebook),
           ),
-        );
+        ).then((_) => _workspaceController.loadWorkspace());
       }
     } catch (e) {
-      debugPrint("Failed to import PDF: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to import PDF: $e")),
+          SnackBar(content: Text("Failed to import PDF notebook: $e")),
         );
       }
     }
@@ -209,8 +243,8 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
       builder: (context, _) {
         final activeFolder = _workspaceController.activeFolder;
         final hasActiveFolder = activeFolder != null;
+        final breadcrumbs = _workspaceController.breadcrumbs;
 
-        // Apply metadata query filter
         final filteredFolders = _workspaceController.folders.where(
           (f) => f.name.toLowerCase().contains(_searchQuery.toLowerCase())
         ).toList();
@@ -225,17 +259,13 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
                 ? TextField(
                     controller: _searchController,
                     decoration: const InputDecoration(
-                      hintText: "Search notebooks & folders...",
+                      hintText: "Search notebooks, folders, & page text...",
                       border: InputBorder.none,
                       hintStyle: TextStyle(color: Colors.grey),
                     ),
                     autofocus: true,
                     style: const TextStyle(fontSize: 16),
-                    onChanged: (val) {
-                      setState(() {
-                        _searchQuery = val;
-                      });
-                    },
+                    onChanged: _onSearchChanged,
                   )
                 : Row(
                     children: [
@@ -251,14 +281,8 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
                 ? IconButton(
                     icon: const Icon(Icons.arrow_back),
                     onPressed: () {
-                      _workspaceController.navigateToFolder(null);
-                      if (_isSearching) {
-                        setState(() {
-                          _isSearching = false;
-                          _searchQuery = "";
-                          _searchController.clear();
-                        });
-                      }
+                      _workspaceController.navigateUp();
+                      if (_isSearching) _clearSearch();
                     },
                   )
                 : null,
@@ -268,9 +292,7 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
                 onPressed: () {
                   setState(() {
                     if (_isSearching) {
-                      _isSearching = false;
-                      _searchQuery = "";
-                      _searchController.clear();
+                      _clearSearch();
                     } else {
                       _isSearching = true;
                     }
@@ -287,64 +309,70 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
             ),
           ),
           backgroundColor: const Color(0xFFF7F7F7),
-          body: filteredFolders.isEmpty && filteredNotebooks.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.folder_open_outlined, size: 64, color: Colors.grey.shade400),
-                      const SizedBox(height: 16),
-                      Text(
-                        _searchQuery.isNotEmpty 
-                            ? "No matches found for '$_searchQuery'"
-                            : "Your workspace is empty.",
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _searchQuery.isNotEmpty 
-                            ? "Try refining your search keyword."
-                            : "Tap the Buttons below to add folders or notebooks.",
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                      ),
-                    ],
+          body: Column(
+            children: [
+              // Breadcrumb trail bar
+              if (breadcrumbs.isNotEmpty && !_isSearching)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
                   ),
-                )
-              : GridView.builder(
-                  padding: const EdgeInsets.all(24),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 180,
-                    mainAxisSpacing: 20,
-                    crossAxisSpacing: 20,
-                    childAspectRatio: 0.85,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => _workspaceController.navigateToFolder(null),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.home_outlined, size: 16, color: Colors.green),
+                              SizedBox(width: 4),
+                              Text("Home", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                        for (int i = 0; i < breadcrumbs.length; i++) ...[
+                          const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+                          GestureDetector(
+                            onTap: () => _workspaceController.navigateToBreadcrumb(i),
+                            child: Text(
+                              breadcrumbs[i].name,
+                              style: TextStyle(
+                                color: i == breadcrumbs.length - 1 ? Colors.black87 : Colors.green,
+                                fontWeight: i == breadcrumbs.length - 1 ? FontWeight.bold : FontWeight.w500,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                  itemCount: filteredFolders.length + filteredNotebooks.length,
-                  itemBuilder: (context, index) {
-                    final showFolder = index < filteredFolders.length;
-                    
-                    if (showFolder) {
-                      final folder = filteredFolders[index];
-                      return _buildFolderCard(folder);
-                    } else {
-                      final notebookIndex = index - filteredFolders.length;
-                      final notebook = filteredNotebooks[notebookIndex];
-                      return _buildNotebookCard(notebook);
-                    }
-                  },
                 ),
+
+              // Main Body: Search Results or Explorer Grid
+              Expanded(
+                child: _isSearching && _searchQuery.isNotEmpty
+                    ? _buildSearchResultsView(filteredFolders, filteredNotebooks)
+                    : _buildWorkspaceGrid(filteredFolders, filteredNotebooks),
+              ),
+            ],
+          ),
           floatingActionButton: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (!hasActiveFolder) ...[
-                FloatingActionButton.small(
-                  heroTag: "add_folder",
-                  onPressed: _showCreateFolderDialog,
-                  backgroundColor: Colors.green.shade100,
-                  foregroundColor: Colors.green.shade900,
-                  child: const Icon(Icons.create_new_folder),
-                ),
-                const SizedBox(height: 12),
-              ],
+              FloatingActionButton.small(
+                heroTag: "add_folder",
+                onPressed: _showCreateFolderDialog,
+                backgroundColor: Colors.green.shade100,
+                foregroundColor: Colors.green.shade900,
+                tooltip: hasActiveFolder ? "Add Sub-Folder" : "Add Folder",
+                child: const Icon(Icons.create_new_folder),
+              ),
+              const SizedBox(height: 12),
               FloatingActionButton.small(
                 heroTag: "import_pdf",
                 onPressed: _importPDFNotebookFlow,
@@ -359,6 +387,7 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
                 onPressed: _showCreateNotebookDialog,
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
+                tooltip: "Create Notebook",
                 child: const Icon(Icons.add_task),
               ),
             ],
@@ -368,18 +397,183 @@ class _HomeExplorerViewState extends State<HomeExplorerView> {
     );
   }
 
+  // --- SEARCH RESULTS VIEW WITH PAGE NOTE SNIPPETS ---
+  Widget _buildSearchResultsView(List<Folder> folders, List<Notebook> notebooks) {
+    final hasNoResults = folders.isEmpty && notebooks.isEmpty && _deepSearchResults.isEmpty;
+
+    if (hasNoResults) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off_rounded, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              "No matches found for '$_searchQuery'",
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Searched across folder titles, notebook titles, and page note contents.",
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      children: [
+        if (folders.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 6),
+            child: Text(
+              "FOLDERS",
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5),
+            ),
+          ),
+          ...folders.map((f) => ListTile(
+            leading: Icon(Icons.folder_rounded, color: Color(f.colorValue)),
+            title: Text(f.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+            trailing: const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+            onTap: () {
+              _workspaceController.navigateToFolder(f);
+              _clearSearch();
+            },
+          )),
+        ],
+
+        if (notebooks.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 6),
+            child: Text(
+              "NOTEBOOKS",
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5),
+            ),
+          ),
+          ...notebooks.map((n) => ListTile(
+            leading: const Icon(Icons.chrome_reader_mode_rounded, color: Colors.green),
+            title: Text(n.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+            trailing: const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => NotebookEditorView(notebook: n)),
+              ).then((_) => _workspaceController.loadWorkspace());
+            },
+          )),
+        ],
+
+        if (_deepSearchResults.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 6),
+            child: Text(
+              "MATCHES IN PAGE NOTES (TEXT OVERLAY)",
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5),
+            ),
+          ),
+          ..._deepSearchResults.map((item) {
+            final notebookId = item['notebook_id'] as int;
+            final notebookName = item['notebook_name'] as String;
+            final pageIndex = item['page_index'] as int;
+            final matchedText = item['matched_text'] as String;
+            final folderId = item['folder_id'] as int?;
+
+            return Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 1,
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.green.shade50,
+                  child: const Icon(Icons.sticky_note_2_outlined, color: Colors.green, size: 20),
+                ),
+                title: Text(
+                  "$notebookName • Page ${pageIndex + 1}",
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                subtitle: Text(
+                  matchedText,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: Colors.black87),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+                onTap: () {
+                  final nb = Notebook(id: notebookId, name: notebookName, folderId: folderId);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => NotebookEditorView(
+                        notebook: nb,
+                        initialPageIndex: pageIndex,
+                      ),
+                    ),
+                  ).then((_) => _workspaceController.loadWorkspace());
+                },
+              ),
+            );
+          }),
+        ],
+      ],
+    );
+  }
+
+  // --- WORKSPACE GRID VIEW ---
+  Widget _buildWorkspaceGrid(List<Folder> folders, List<Notebook> notebooks) {
+    if (folders.isEmpty && notebooks.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.folder_open_outlined, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              _searchQuery.isNotEmpty 
+                  ? "No matches found for '$_searchQuery'"
+                  : "This folder is empty.",
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _searchQuery.isNotEmpty 
+                  ? "Try refining your search keyword."
+                  : "Tap the buttons below to create folders, notebooks, or import PDFs.",
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(24),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 180,
+        mainAxisSpacing: 20,
+        crossAxisSpacing: 20,
+        childAspectRatio: 0.85,
+      ),
+      itemCount: folders.length + notebooks.length,
+      itemBuilder: (context, index) {
+        final showFolder = index < folders.length;
+        if (showFolder) {
+          return _buildFolderCard(folders[index]);
+        } else {
+          final notebookIndex = index - folders.length;
+          return _buildNotebookCard(notebooks[notebookIndex]);
+        }
+      },
+    );
+  }
+
   // --- ITEM RENDERING WIDGETS ---
   Widget _buildFolderCard(Folder folder) {
     return GestureDetector(
       onTap: () {
         _workspaceController.navigateToFolder(folder);
-        if (_isSearching) {
-          setState(() {
-            _isSearching = false;
-            _searchQuery = "";
-            _searchController.clear();
-          });
-        }
+        if (_isSearching) _clearSearch();
       },
       child: Card(
         color: Colors.white,
